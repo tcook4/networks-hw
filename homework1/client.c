@@ -1,7 +1,12 @@
 /* Written by Tyler Cook
- *
- *
+ * UNT CSCE 3530
+ * Homework 1
+ * January 29th, 2019
+ * Description: This program is the client side to a server. The user can send messages to the server
+ * which parses the message and returns the word count and converts all uppercase characters to
+ * lowercase.
  */
+
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -18,7 +23,12 @@ int main (int argc, char **argv)
     struct sockaddr_in servaddr;
 
     /* AF_INET - IPv4 IP , Type of socket, protocol*/
-    sockfd=socket(AF_INET, SOCK_STREAM, 0);
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0)
+    {
+        perror("ERROR opening socket");
+        exit(1);
+    }
     bzero(&servaddr,sizeof(servaddr));
 
     servaddr.sin_family=AF_INET;
