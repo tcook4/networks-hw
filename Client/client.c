@@ -17,23 +17,22 @@
 
 int main (int argc, char **argv)
 {
-    int sockfd, n;
-    int len = sizeof(struct sockaddr);
-    struct sockaddr_in servaddr;
-    char buffer[1024];
-    char input[1024];
-    int iteration = 0;
-    int dataLength;
-    int bufferLength;
+    int sockfd;                     // Socket file descriptor
+    int n;                          // Error checking for read() and write() calls
+    struct sockaddr_in servaddr;    // Server address structure
+    char buffer[1024];              // Sent and received message buffer
+    char input[1024];               // fgets() input buffer
+    int dataLength;                 // Length of the data to be sent
+    int bufferLength;               // Length of the buffer to be read to
 
-    // verify we have correct number of arguments
+    // Verify we have correct number of arguments
     if (argc != 2)
     {
-        printf("Error: Program usage is %s port_number", argv[0]);
+        printf("Error: Program usage: %s port_number", argv[0]);
         exit(1);
     }
 
-    // set our port number
+    // Set our port number
     int portNumber = atoi(argv[1]);
 
     // AF_INET - IPv4 IP , Type of socket, protocol
@@ -44,30 +43,34 @@ int main (int argc, char **argv)
         exit(1);
     }
     bzero(&servaddr,sizeof(servaddr));
-
     servaddr.sin_family=AF_INET;
     servaddr.sin_port=htons(portNumber); // Server port number
 
-    /* Convert IPv4 and IPv6 addresses from text to binary form */
+    // Convert IPv4 and IPv6 addresses from text to binary form
     // using localhost for testing
+    // TODO: revise to use cse01
     inet_pton(AF_INET,"127.0.0.1",&(servaddr.sin_addr));
 
     // Connect to the server
     if(connect(sockfd,(struct sockaddr *)&servaddr,sizeof(servaddr)) < 0)
     {
-        perror("ERROR connecting!");
+        perror("Error connecting\n");
         exit(1);
     }
 
     printf("Successfully connected to server!\n");
     printf("Please enter a string to parse, or \"quit\" to exit\n");
 
+    // Main body loop
+    // Ask user for input then display server response
     while (1)
     {
-        // get input from user
+        // Get input from user
         printf("Input: ");
-        fgets(input, 1024, stdin);
-        // check if we're quitting
+        bzero(input, 1024);
+        fgets(input, 1024, stdin);  // TODO: input bounds checking
+
+        // Check if we're quitting
         if (strcmp(input, "quit") == 0)
         {
             printf("Exiting...\n");
@@ -77,36 +80,42 @@ int main (int argc, char **argv)
             break;
         }
 
-        // send data to server
+        // Send data to server
         else
         {
-            // zero our buffer and send the size
+            // Prepare our buffer
             bzero(buffer, 1024);
             strcpy(buffer, input);
+
+            // Find and send the size of the message
             dataLength = strlen(buffer);
-
-            printf("converting %d bytes to network order\n", dataLength);
-
-            bufferLength = htonl(dataLength);
+            bufferLength = htonl(dataLength); // Convert to network byte order
             n = write(sockfd, (char*)&bufferLength, sizeof(bufferLength));
             if (n < 0)
             {
                 perror("Error sending message size\n");
             }
 
-            // send the message
-            write(sockfd, buffer, dataLength);
+            // Send the actual message body
+            n = write(sockfd, buffer, dataLength);
+            if (n < 0)
+            {
+                perror("Error sending message\n");
+            }
         }
 
-        // listen for response
-        // get response size
+        // Listen for server response
+        // Receive response size
         n = read(sockfd, (char*)&bufferLength, sizeof(bufferLength));
         if (n < 0)
         {
             perror("Error receiving message size\n");
         }
 
+        // Convert size from network to host order
         dataLength = ntohl(bufferLength);
+
+        // Zero our buffer and read the message body
         bzero(buffer, 1024);
         n = read(sockfd, buffer, bufferLength);
         if (n < 0)
@@ -114,10 +123,9 @@ int main (int argc, char **argv)
             perror("Error receiving message\n");
         }
 
+        // Print server response to the user
         printf("%s\n", buffer);
-        iteration++;
-        printf("%d iterations\n", iteration);
-        bzero(input, 1024);
     }
+
     return 0;
 }
