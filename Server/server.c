@@ -25,10 +25,11 @@ int main(int argc, char **argv)
     int dataLength;
     int bufferLength;
     int portNumber;
+    char numBuff[50];
 
     if (argc == 2)
     {
-    portNumber = atoi(argv[1]);
+        portNumber = atoi(argv[1]);
     }
 
 
@@ -61,6 +62,9 @@ int main(int argc, char **argv)
         exit(1);
     }
 
+    // Main body loop
+    // Receive message from user, strip capitalization and return new string along with
+    // word count and character count
     while(1)
     {
         // get input from client
@@ -74,20 +78,16 @@ int main(int argc, char **argv)
         // convert to buffer size
         bufferLength = ntohl(dataLength);
 
-        printf("Reading %d bytes of data\n", bufferLength);
-
         // read the actual message
         bzero(buffer, 1024);
-        do
+        n = read(conn_fd, buffer, bufferLength);
+        if (n < 0)
         {
-            n = read(conn_fd, buffer, bufferLength);
+            perror("Error reading message from client\n");
         }
-        while (n < bufferLength);
 
-        printf("Recieved data from client: \n");
-        printf("%s\n", buffer);
-
-/*        // parse our string and append it to our return
+        bzero(output, 1024);
+        // parse our string and append it to our return
         for (i = 0; i < strlen(buffer); i++)
         {
             if (buffer[i] == ' ')
@@ -108,13 +108,23 @@ int main(int argc, char **argv)
             }
         }
 
-        */
+        // Generate our response information
+        strcat(output, "\nTotal Characters: ");
+        sprintf(numBuff, "%d", characters);
+        strcat(output, numBuff);
+        strcat(output, "\nTotal Words: ");
+        sprintf(numBuff, "%d", words);
+        strcat(output, numBuff);
+        strcat(output, "\n\nEnd Transmission!\n\n");
 
-        bzero(output, 1024);
-        strcpy(output, buffer);
 
-        printf("Writing to the client: \n");
-        printf("%s", output);
+        printf("Sending this to our client\n");
+        printf("%s\n", output);
+
+        strcpy(buffer, output);
+
+        printf("Writing this after copy to the client: \n");
+        printf("%s", buffer);
 
         // send client data size
         dataLength = htonl(output);
@@ -131,9 +141,10 @@ int main(int argc, char **argv)
             perror("Error sending client message\n");
         }
 
-        printf("Successfully sent message (hopefully!)\n");
+        printf("Successfully sent message\n");
 
     }
-    //close (conn_fd); //close the connection
+
+    close (conn_fd); //close the connection
     return 0;
 }
