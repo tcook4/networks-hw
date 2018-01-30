@@ -24,10 +24,12 @@ int main(int argc, char **argv)
     int bufferLength;                   // Length of message to be received
     int portNumber;                     // Port number to use if supplied
     char numBuff[50];                   // Number storage for casting int to string
+    int space;                          // Multiple space detection
 
     // Initialization
     words = 0;
     characters = 0;
+    space = 0;
 
     // AF_INET - IPv4 IP , Type of socket, protocol
     listen_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -62,7 +64,7 @@ int main(int argc, char **argv)
 
     // Main body loop
     // Receive message from user, strip capitalization and return new string along with
-    // word count and character count
+    // word and character count
     while(1)
     {
         // Get input from client
@@ -85,6 +87,8 @@ int main(int argc, char **argv)
         }
 
         // Parse our string for capitals, words and characters, and append it to our response
+        // TODO: Multiple space detection
+        // TODO: Punctuation detection
         bzero(output, 1024);
         for (i = 0; i < strlen(buffer); i++)
         {
