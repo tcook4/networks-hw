@@ -71,7 +71,7 @@ int main (int argc, char **argv)
         fgets(input, 1024, stdin);  // TODO: input bounds checking
 
         // Check if we're quitting
-        if (strcmp(input, "quit") == 0)
+        if (strcmp(input, "quit\n") == 0)
         {
             printf("Exiting...\n");
             bzero(buffer, 1024);
@@ -124,6 +124,7 @@ int main (int argc, char **argv)
         }
 
         // Print server response to the user
+        printf("Server response: \n");
         printf("%s\n", buffer);
     }
 
