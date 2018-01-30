@@ -15,33 +15,30 @@
 
 int main(int argc, char **argv)
 {
-    char buffer[1024];
-    int listen_fd, conn_fd, n;
-    struct sockaddr_in servaddr;
-    char output[1024];
-    int words, characters, i;
+    char buffer[1024];                  // Communication buffer between client and server
+    int listen_fd, conn_fd, n;          // File descriptors and error checking
+    struct sockaddr_in servaddr;        // Server address structure
+    char output[1024];                  // Output message storage
+    int words, characters, i;           // Data storage for response message and iterator
+    int dataLength;                     // Length of message to be sent
+    int bufferLength;                   // Length of message to be received
+    int portNumber;                     // Port number to use if supplied
+    char numBuff[50];                   // Number storage for casting int to string
+
+    // Initialization
     words = 0;
     characters = 0;
-    int dataLength;
-    int bufferLength;
-    int portNumber;
-    char numBuff[50];
 
+    // AF_INET - IPv4 IP , Type of socket, protocol
+    listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+    bzero(&servaddr, sizeof(servaddr));
+    servaddr.sin_family = AF_INET;
+    servaddr.sin_addr.s_addr = htons(INADDR_ANY);
+
+    // Use our port number if given
     if (argc == 2)
     {
         portNumber = atoi(argv[1]);
-    }
-
-
-    /* AF_INET - IPv4 IP , Type of socket, protocol*/
-    listen_fd = socket(AF_INET, SOCK_STREAM, 0);
-
-    bzero(&servaddr, sizeof(servaddr));
-
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = htons(INADDR_ANY);
-    if (argc == 2)
-    {
         servaddr.sin_port = htons(portNumber);
     }
     else
@@ -49,9 +46,10 @@ int main(int argc, char **argv)
         servaddr.sin_port = htons(22000);
     }
 
-    /* Binds the above details to the socket */
+    // Binds the above details to the socket
     bind(listen_fd,  (struct sockaddr *) &servaddr, sizeof(servaddr));
-    /* Start listening to incoming connections */
+
+    // Start listening to incoming connections
     listen(listen_fd, 10);
 
     // Accepts an incoming connection
@@ -67,18 +65,18 @@ int main(int argc, char **argv)
     // word count and character count
     while(1)
     {
-        // get input from client
-        // get data size
+        // Get input from client
+        // Get data size first
         n = read(conn_fd, (char*)&dataLength, sizeof(dataLength));
         if (n < 0)
         {
             perror("Error getting data size\n");
         }
 
-        // convert to buffer size
+        // Convert from network byte order
         bufferLength = ntohl(dataLength);
 
-        // read the actual message
+        // Read the actual message
         bzero(buffer, 1024);
         n = read(conn_fd, buffer, bufferLength);
         if (n < 0)
@@ -86,8 +84,8 @@ int main(int argc, char **argv)
             perror("Error reading message from client\n");
         }
 
+        // Parse our string for capitals, words and characters, and append it to our response
         bzero(output, 1024);
-        // parse our string and append it to our return
         for (i = 0; i < strlen(buffer); i++)
         {
             if (buffer[i] == ' ')
@@ -108,25 +106,20 @@ int main(int argc, char **argv)
             }
         }
 
-        // Generate our response information
+        // Generate the rest of our response information
         strcat(output, "\nTotal Characters: ");
         sprintf(numBuff, "%d", characters);
         strcat(output, numBuff);
         strcat(output, "\nTotal Words: ");
         sprintf(numBuff, "%d", words);
         strcat(output, numBuff);
-        strcat(output, "\n\nEnd Transmission!\n\n");
-
-
-        printf("Sending this to our client\n");
-        printf("%s\n", output);
-
+        strcat(output, "\n");
         strcpy(buffer, output);
 
-        printf("Writing this after copy to the client: \n");
-        printf("%s", buffer);
+        //printf("Writing this after copy to the client: \n");
+        //printf("%s", buffer);
 
-        // send client data size
+        // Send client the message size
         dataLength = htonl(output);
         n = write(conn_fd, (char*)&dataLength, sizeof(dataLength));
         if (n < 0)
@@ -134,7 +127,7 @@ int main(int argc, char **argv)
             perror("Error sending client data size\n");
         }
 
-        // write to the client
+        // Write actual message to the client
         n = write(conn_fd, output, sizeof(output));
         if (n < 0)
         {
@@ -142,7 +135,6 @@ int main(int argc, char **argv)
         }
 
         printf("Successfully sent message\n");
-
     }
 
     close (conn_fd); //close the connection
