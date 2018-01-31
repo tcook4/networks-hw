@@ -20,8 +20,8 @@ int main(int argc, char **argv)
     struct sockaddr_in servaddr;        // Server address structure
     char output[1024];                  // Output message storage
     int words, characters, i;           // Data storage for response message and iterator
-    int bufferLength;                     // Length of message to be sent
-    int dataLength;                   // Length of message to be received
+    int bufferLength;                   // Length of message to be sent
+    int dataLength;                     // Length of message to be received
     int portNumber;                     // Port number to use if supplied
     char numBuff[12];                   // Number storage for casting int to string
     int space;                          // Multiple space detection
@@ -33,7 +33,6 @@ int main(int argc, char **argv)
 
     // AF_INET - IPv4 IP , Type of socket, protocol
     listen_fd = socket(AF_INET, SOCK_STREAM, 0);
-
     bzero(&servaddr, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = htons(INADDR_ANY);
@@ -50,7 +49,7 @@ int main(int argc, char **argv)
     }
 
     // Binds the above details to the socket
-    bind(listen_fd,  (struct sockaddr *) &servaddr, sizeof(servaddr));
+    bind(listen_fd, (struct sockaddr *) &servaddr, sizeof(servaddr));
 
     // Start listening to incoming connections
     listen(listen_fd, 10);
@@ -69,14 +68,12 @@ int main(int argc, char **argv)
     while(1)
     {
         // Get input from client
-        // Get data size first
+        // Get message size and convert from network order
         n = read(conn_fd, (char*)&bufferLength, sizeof(bufferLength));
         if (n < 0)
         {
             perror("Error getting data size\n");
         }
-
-        // Convert from network byte order
         dataLength = ntohl(bufferLength);
 
         // Read the actual message
@@ -134,15 +131,12 @@ int main(int argc, char **argv)
         strcpy(buffer, output);
 
         // Send client the message size
-        dataLength = strlen(buffer);
-        bufferLength = htonl(dataLength);
+        bufferLength = htonl(strlen(buffer));
         n = write(conn_fd, (char*)&bufferLength, sizeof(bufferLength));
         if (n < 0)
         {
             perror("Error sending client data size\n");
         }
-
-        printf("Testing - sending %d as the size\n", strlen(buffer));
 
         // Write actual message to the client
         n = write(conn_fd, buffer, strlen(buffer));

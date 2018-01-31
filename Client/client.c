@@ -23,8 +23,7 @@ int main (int argc, char **argv)
     char input[1024];               // fgets() input buffer
     int dataLength;                 // Length of the data to be sent
     int bufferLength;               // Length of the buffer to be read to
-    int portNumber;
-    struct hostent * server;
+    int portNumber;                 // Port number
 
     // Verify we have correct number of arguments
     if (argc != 2)
@@ -38,7 +37,6 @@ int main (int argc, char **argv)
         portNumber = atoi(argv[1]);
     }
 
-
     // AF_INET - IPv4 IP , Type of socket, protocol
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (sockfd < 0) // check for errors
@@ -50,18 +48,8 @@ int main (int argc, char **argv)
     servaddr.sin_family=AF_INET;
     servaddr.sin_port=htons(portNumber); // Server port number
 
-    // Convert IPv4 and IPv6 addresses from text to binary form
-    // using localhost for testing
-    // TODO: revise to use cse01
-    //inet_pton(AF_INET,"127.0.0.1",&(servaddr.sin_addr));
-    server = gethostbyname("cse01.cse.unt.edu");
-    if (server == NULL)
-    {
-        perror("error assigning host\n");
-        exit(1);
-    }
-    bcopy((char *)server->h_addr, (char *)&servaddr.sin_addr.s_addr, server->h_length);
-
+    // Convert IPv4 and IPv6 addresses from text to binary for
+    inet_pton(AF_INET,"129.120.151.94",&(servaddr.sin_addr));
 
     // Connect to the server
     if(connect(sockfd,(struct sockaddr *)&servaddr,sizeof(servaddr)) < 0)
@@ -99,11 +87,8 @@ int main (int argc, char **argv)
             bzero(buffer, 1024);
             strcpy(buffer, input);
 
-            printf("testing - sending %d as the size\n", strlen(buffer));
-
-            // Find and send the size of the message
-            dataLength = strlen(buffer);
-            bufferLength = htonl(dataLength); // Convert to network byte order
+            // Find and send the size of the message after converting to network order
+            bufferLength = htonl(strlen(buffer));
             n = write(sockfd, (char*)&bufferLength, sizeof(bufferLength));
             if (n < 0)
             {
@@ -119,14 +104,12 @@ int main (int argc, char **argv)
         }
 
         // Listen for server response
-        // Receive response size
+        // Receive response size and convert from network order
         n = read(sockfd, (char*)&bufferLength, sizeof(bufferLength));
         if (n < 0)
         {
             perror("Error receiving message size\n");
         }
-
-        // Convert size from network to host order
         dataLength = ntohl(bufferLength);
 
         // Zero our buffer and read the message body
