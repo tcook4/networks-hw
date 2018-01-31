@@ -20,10 +20,10 @@ int main(int argc, char **argv)
     struct sockaddr_in servaddr;        // Server address structure
     char output[1024];                  // Output message storage
     int words, characters, i;           // Data storage for response message and iterator
-    int dataLength;                     // Length of message to be sent
-    int bufferLength;                   // Length of message to be received
+    int bufferLength;                     // Length of message to be sent
+    int dataLength;                   // Length of message to be received
     int portNumber;                     // Port number to use if supplied
-    char numBuff[50];                   // Number storage for casting int to string
+    char numBuff[12];                   // Number storage for casting int to string
     int space;                          // Multiple space detection
 
     // Initialization
@@ -33,6 +33,7 @@ int main(int argc, char **argv)
 
     // AF_INET - IPv4 IP , Type of socket, protocol
     listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+
     bzero(&servaddr, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = htons(INADDR_ANY);
@@ -45,7 +46,7 @@ int main(int argc, char **argv)
     }
     else
     {
-        servaddr.sin_port = htons(22000);
+        servaddr.sin_port = htons(55122);
     }
 
     // Binds the above details to the socket
@@ -69,18 +70,18 @@ int main(int argc, char **argv)
     {
         // Get input from client
         // Get data size first
-        n = read(conn_fd, (char*)&dataLength, sizeof(dataLength));
+        n = read(conn_fd, (char*)&bufferLength, sizeof(bufferLength));
         if (n < 0)
         {
             perror("Error getting data size\n");
         }
 
         // Convert from network byte order
-        bufferLength = ntohl(dataLength);
+        dataLength = ntohl(bufferLength);
 
         // Read the actual message
         bzero(buffer, 1024);
-        n = read(conn_fd, buffer, bufferLength);
+        n = read(conn_fd, buffer, dataLength);
         if (n < 0)
         {
             perror("Error reading message from client\n");
@@ -94,17 +95,29 @@ int main(int argc, char **argv)
         {
             if (buffer[i] == ' ')
             {
-                words++;
-                characters++;
-                output[i] = ' ';
+                // skip multiple spaces
+                if (space == 1)
+                {
+                    output[i] = ' ';
+                    characters++;
+                }
+                else
+                {
+                    space = 1;
+                    words++;
+                    characters++;
+                    output[i] = ' ';
+                }
             }
             else if (buffer[i] >= 'A' && buffer[i] <= 'Z')
             {
+                space = 0;
                 output[i] = buffer[i] + 32;
                 characters++;
             }
             else
             {
+                space = 0;
                 output[i] = buffer[i];
                 characters++;
             }
@@ -120,25 +133,28 @@ int main(int argc, char **argv)
         strcat(output, "\n");
         strcpy(buffer, output);
 
-        //printf("Writing this after copy to the client: \n");
-        //printf("%s", buffer);
-
         // Send client the message size
-        dataLength = htonl(output);
-        n = write(conn_fd, (char*)&dataLength, sizeof(dataLength));
+        dataLength = strlen(buffer);
+        bufferLength = htonl(dataLength);
+        n = write(conn_fd, (char*)&bufferLength, sizeof(bufferLength));
         if (n < 0)
         {
             perror("Error sending client data size\n");
         }
 
+        printf("Testing - sending %d as the size\n", strlen(buffer));
+
         // Write actual message to the client
-        n = write(conn_fd, output, sizeof(output));
+        n = write(conn_fd, buffer, strlen(buffer));
         if (n < 0)
         {
             perror("Error sending client message\n");
         }
 
+        // Inform user of successful send and reset counters
         printf("Successfully sent message\n");
+        characters = 0;
+        words = 0;
     }
 
     close (conn_fd); //close the connection

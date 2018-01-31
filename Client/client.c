@@ -7,7 +7,6 @@
  * lowercase.
  */
 
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -24,16 +23,21 @@ int main (int argc, char **argv)
     char input[1024];               // fgets() input buffer
     int dataLength;                 // Length of the data to be sent
     int bufferLength;               // Length of the buffer to be read to
+    int portNumber;
+    struct hostent * server;
 
     // Verify we have correct number of arguments
     if (argc != 2)
     {
-        printf("Error: Program usage: %s port_number", argv[0]);
-        exit(1);
+        //printf("Error: Program usage: %s port_number", argv[0]);
+        //exit(1);
+        portNumber = 55122;
+    }
+    else
+    {
+        portNumber = atoi(argv[1]);
     }
 
-    // Set our port number
-    int portNumber = atoi(argv[1]);
 
     // AF_INET - IPv4 IP , Type of socket, protocol
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -49,7 +53,15 @@ int main (int argc, char **argv)
     // Convert IPv4 and IPv6 addresses from text to binary form
     // using localhost for testing
     // TODO: revise to use cse01
-    inet_pton(AF_INET,"127.0.0.1",&(servaddr.sin_addr));
+    //inet_pton(AF_INET,"127.0.0.1",&(servaddr.sin_addr));
+    server = gethostbyname("cse01.cse.unt.edu");
+    if (server == NULL)
+    {
+        perror("error assigning host\n");
+        exit(1);
+    }
+    bcopy((char *)server->h_addr, (char *)&servaddr.sin_addr.s_addr, server->h_length);
+
 
     // Connect to the server
     if(connect(sockfd,(struct sockaddr *)&servaddr,sizeof(servaddr)) < 0)
@@ -87,6 +99,8 @@ int main (int argc, char **argv)
             bzero(buffer, 1024);
             strcpy(buffer, input);
 
+            printf("testing - sending %d as the size\n", strlen(buffer));
+
             // Find and send the size of the message
             dataLength = strlen(buffer);
             bufferLength = htonl(dataLength); // Convert to network byte order
@@ -97,7 +111,7 @@ int main (int argc, char **argv)
             }
 
             // Send the actual message body
-            n = write(sockfd, buffer, dataLength);
+            n = write(sockfd, buffer, strlen(buffer));
             if (n < 0)
             {
                 perror("Error sending message\n");
@@ -117,7 +131,7 @@ int main (int argc, char **argv)
 
         // Zero our buffer and read the message body
         bzero(buffer, 1024);
-        n = read(sockfd, buffer, bufferLength);
+        n = read(sockfd, buffer, dataLength);
         if (n < 0)
         {
             perror("Error receiving message\n");
