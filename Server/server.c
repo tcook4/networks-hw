@@ -1,7 +1,7 @@
 /* Written by Tyler Cook
  * UNT CSCE 3530
  * Homework 1
- * January 29th, 2019
+ * January 29th, 2018
  * Description: This program is the server side to a client. The client sends messages which the server accepts,
  * then returns the word count and converts to message to lower case.
  */
