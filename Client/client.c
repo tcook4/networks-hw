@@ -28,9 +28,8 @@ int main (int argc, char **argv)
     // Verify we have correct number of arguments
     if (argc != 2)
     {
-        //printf("Error: Program usage: %s port_number", argv[0]);
-        //exit(1);
-        portNumber = 55122;
+        printf("Error: Program usage: %s port_number\n", argv[0]);
+        exit(1);
     }
     else
     {
@@ -48,7 +47,7 @@ int main (int argc, char **argv)
     servaddr.sin_family=AF_INET;
     servaddr.sin_port=htons(portNumber); // Server port number
 
-    // Convert IPv4 and IPv6 addresses from text to binary for
+    // Convert IPv4 and IPv6 addresses from text to binary form
     inet_pton(AF_INET,"129.120.151.94",&(servaddr.sin_addr));
 
     // Connect to the server
@@ -73,10 +72,24 @@ int main (int argc, char **argv)
         // Check if we're quitting
         if (strcmp(input, "quit\n") == 0)
         {
-            printf("Exiting...\n");
+            printf("Exiting...\n");            
             bzero(buffer, 1024);
-            strcpy(buffer, "quit");
-            n = write(sockfd, buffer, sizeof(buffer));
+            strcpy(buffer, input);
+
+            bufferLength = htonl(strlen(buffer));
+            n = write(sockfd, (char*)&bufferLength, sizeof(bufferLength));
+            if (n < 0)
+            {
+                perror("Error sending message size\n");
+            }
+
+            // Send the quit message
+            n = write(sockfd, buffer, strlen(buffer));
+            if (n < 0)
+            {
+                perror("Error sending message\n");
+            }
+
             break;
         }
 
