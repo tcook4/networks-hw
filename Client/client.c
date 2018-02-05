@@ -24,6 +24,10 @@ int main (int argc, char **argv)
     int dataLength;                 // Length of the data to be sent
     int bufferLength;               // Length of the buffer to be read to
     int portNumber;                 // Port number
+    int quit;                       // Quitting detection
+
+    // Initialization
+    quit = 0;
 
     // Verify we have correct number of arguments
     if (argc != 2)
@@ -67,53 +71,39 @@ int main (int argc, char **argv)
         // Get input from user
         printf("Input: ");
         bzero(input, 1024);
-        fgets(input, 1024, stdin);  // TODO: input bounds checking
+        fgets(input, 1024, stdin);
 
         // Check if we're quitting
         if (strcmp(input, "quit\n") == 0)
         {
-            printf("Exiting...\n");            
-            bzero(buffer, 1024);
-            strcpy(buffer, input);
-
-            bufferLength = htonl(strlen(buffer));
-            n = write(sockfd, (char*)&bufferLength, sizeof(bufferLength));
-            if (n < 0)
-            {
-                perror("Error sending message size\n");
-            }
-
-            // Send the quit message
-            n = write(sockfd, buffer, strlen(buffer));
-            if (n < 0)
-            {
-                perror("Error sending message\n");
-            }
-
-            break;
+            quit = 1;
         }
 
         // Send data to server
-        else
+        // Prepare our buffer
+        bzero(buffer, 1024);
+        strcpy(buffer, input);
+
+        // Find and send the size of the message after converting to network order
+        bufferLength = htonl(strlen(buffer));
+        n = write(sockfd, (char*)&bufferLength, sizeof(bufferLength));
+        if (n < 0)
         {
-            // Prepare our buffer
-            bzero(buffer, 1024);
-            strcpy(buffer, input);
+            perror("Error sending message size\n");
+        }
 
-            // Find and send the size of the message after converting to network order
-            bufferLength = htonl(strlen(buffer));
-            n = write(sockfd, (char*)&bufferLength, sizeof(bufferLength));
-            if (n < 0)
-            {
-                perror("Error sending message size\n");
-            }
+        // Send the actual message body
+        n = write(sockfd, buffer, strlen(buffer));
+        if (n < 0)
+        {
+            perror("Error sending message\n");
+        }
 
-            // Send the actual message body
-            n = write(sockfd, buffer, strlen(buffer));
-            if (n < 0)
-            {
-                perror("Error sending message\n");
-            }
+        // We can quit now
+        if (quit == 1)
+        {
+            printf("Exiting...\n");
+            break;
         }
 
         // Listen for server response

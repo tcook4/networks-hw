@@ -56,7 +56,7 @@ int main(int argc, char **argv)
     listen(listen_fd, 10);
     printf("Listening for connection...\n");
 
-    // Accepts an incoming connection
+    // Accept an incoming connection
     conn_fd = accept(listen_fd, (struct sockaddr*)NULL, NULL);
     if (conn_fd < 0) // verify we accepted correctly
     {

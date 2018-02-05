@@ -5,3 +5,7 @@ CONFIG -= qt
 
 SOURCES += \
     client.c
+
+DISTFILES += \
+    README \
+    makefile
