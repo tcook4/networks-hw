@@ -24,35 +24,37 @@ int main(int argc, char **argv)
     int dataLength;                     // Length of message to be received
     int portNumber;                     // Port number to use if supplied
     char numBuff[12];                   // Number storage for casting int to string
-    int space;                          // Multiple space detection
+    int foundLetter;                    // Multiple space detection
 
     // Initialization
     words = 0;
     characters = 0;
-    space = 0;
+    foundLetter = 0;
+
+    // Verify we have correct number of arguments
+    if (argc != 2)
+    {
+        printf("Error: Program usage: %s port_number\n", argv[0]);
+        exit(1);
+    }
+    else
+    {
+        portNumber = atoi(argv[1]);
+    }
 
     // AF_INET - IPv4 IP , Type of socket, protocol
     listen_fd = socket(AF_INET, SOCK_STREAM, 0);
     bzero(&servaddr, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = htons(INADDR_ANY);
-
-    // Use our port number if given
-    if (argc == 2)
-    {
-        portNumber = atoi(argv[1]);
-        servaddr.sin_port = htons(portNumber);
-    }
-    else
-    {
-        servaddr.sin_port = htons(55122);
-    }
+    servaddr.sin_port = htons(portNumber);
 
     // Binds the above details to the socket
     bind(listen_fd, (struct sockaddr *) &servaddr, sizeof(servaddr));
 
     // Start listening to incoming connections
     listen(listen_fd, 10);
+    printf("Listening for connection...\n");
 
     // Accepts an incoming connection
     conn_fd = accept(listen_fd, (struct sockaddr*)NULL, NULL);
@@ -61,6 +63,8 @@ int main(int argc, char **argv)
         perror("ERROR on accept");
         exit(1);
     }
+
+    printf("Successfully connected to client!\n");
 
     // Main body loop
     // Receive message from user, strip capitalization and return new string along with
@@ -73,6 +77,7 @@ int main(int argc, char **argv)
         if (n < 0)
         {
             perror("Error getting data size\n");
+            exit(1);
         }
         dataLength = ntohl(bufferLength);
 
@@ -82,41 +87,56 @@ int main(int argc, char **argv)
         if (n < 0)
         {
             perror("Error reading message from client\n");
+            exit(1);
+        }
+
+        // Check if we're quitting
+        if (strcmp(buffer, "quit\n") == 0)
+        {
+            printf("Exiting...\n");
+            break;
         }
 
         // Parse our string for capitals, words and characters, and append it to our response
-        // TODO: Multiple space detection
-        // TODO: Punctuation detection
+        // Subtract one from strlen(buffer) to remove newline
         bzero(output, 1024);
-        for (i = 0; i < strlen(buffer); i++)
+        for (i = 0; i < strlen(buffer)-1; i++)
         {
+            // Add spaces and prepare to add next found word
             if (buffer[i] == ' ')
             {
-                // skip multiple spaces
-                if (space == 1)
-                {
-                    output[i] = ' ';
-                    characters++;
-                }
-                else
-                {
-                    space = 1;
-                    words++;
-                    characters++;
-                    output[i] = ' ';
-                }
+                foundLetter = 0;
+                characters++;
+                output[i] = ' ';
             }
+
+            // Remove any capitalization
             else if (buffer[i] >= 'A' && buffer[i] <= 'Z')
             {
-                space = 0;
+                if (foundLetter == 0) // Increment words if we're coming from a space
+                {
+                    words++;
+                    foundLetter = 1;
+                }
                 output[i] = buffer[i] + 32;
+                characters++;
+            }
+
+            // Add any lowercase as-is
+            else if (buffer[i] >= 'a' && buffer[i] <= 'z')
+            {
+                if (foundLetter == 0)
+                {
+                    words++;
+                    foundLetter = 1;
+                }
+                output[i] = buffer[i];
                 characters++;
             }
             else
             {
-                space = 0;
-                output[i] = buffer[i];
                 characters++;
+                output[i] = buffer[i];
             }
         }
 
@@ -136,6 +156,7 @@ int main(int argc, char **argv)
         if (n < 0)
         {
             perror("Error sending client data size\n");
+            exit(1);
         }
 
         // Write actual message to the client
@@ -143,14 +164,16 @@ int main(int argc, char **argv)
         if (n < 0)
         {
             perror("Error sending client message\n");
+            exit(1);
         }
 
         // Inform user of successful send and reset counters
         printf("Successfully sent message\n");
         characters = 0;
         words = 0;
+        foundLetter = 0;
     }
 
-    close (conn_fd); //close the connection
+    close (conn_fd); // Close the connection
     return 0;
 }
