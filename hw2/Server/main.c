@@ -1,9 +1,8 @@
 /* Written by Tyler Cook
  * UNT CSCE 3530
- * Homework 1
- * January 29th, 2018
- * Description: This program is the server side to a client. The client sends messages which the server accepts,
- * then returns the word count and converts to message to lower case.
+ * Homework 2
+ * February 28th, 2018
+ * Description:
  */
 
 #include <sys/types.h>
@@ -19,17 +18,18 @@ int main(int argc, char **argv)
     int listen_fd, conn_fd, n;          // File descriptors and error checking
     struct sockaddr_in servaddr;        // Server address structure
     char output[1024];                  // Output message storage
-    int words, characters, i;           // Data storage for response message and iterator
     int bufferLength;                   // Length of message to be sent
     int dataLength;                     // Length of message to be received
     int portNumber;                     // Port number to use if supplied
-    char numBuff[12];                   // Number storage for casting int to string
-    int foundLetter;                    // Multiple space detection
 
-    // Initialization
-    words = 0;
-    characters = 0;
-    foundLetter = 0;
+    FILE *fp;
+
+    // Get allow list from file
+
+
+    // Clear cache on startup
+
+
 
     // Verify we have correct number of arguments
     if (argc != 2)
@@ -67,8 +67,6 @@ int main(int argc, char **argv)
     printf("Successfully connected to client!\n");
 
     // Main body loop
-    // Receive message from user, strip capitalization and return new string along with
-    // word and character count
     while(1)
     {
         // Get input from client
@@ -81,7 +79,7 @@ int main(int argc, char **argv)
         }
         dataLength = ntohl(bufferLength);
 
-        // Read the actual message
+        // Read the website address
         bzero(buffer, 1024);
         n = read(conn_fd, buffer, dataLength);
         if (n < 0)
@@ -90,65 +88,44 @@ int main(int argc, char **argv)
             exit(1);
         }
 
-        // Check if we're quitting
-        if (strcmp(buffer, "quit\n") == 0)
-        {
-            printf("Exiting...\n");
-            break;
-        }
 
-        // Parse our string for capitals, words and characters, and append it to our response
-        // Subtract one from strlen(buffer) to remove newline
-        bzero(output, 1024);
-        for (i = 0; i < strlen(buffer)-1; i++)
-        {
-            // Add spaces and prepare to add next found word
-            if (buffer[i] == ' ')
-            {
-                foundLetter = 0;
-                characters++;
-                output[i] = ' ';
-            }
 
-            // Remove any capitalization
-            else if (buffer[i] >= 'A' && buffer[i] <= 'Z')
-            {
-                if (foundLetter == 0) // Increment words if we're coming from a space
-                {
-                    words++;
-                    foundLetter = 1;
-                }
-                output[i] = buffer[i] + 32;
-                characters++;
-            }
+        // Check if the user is allowed to access the web page
 
-            // Add any lowercase as-is
-            else if (buffer[i] >= 'a' && buffer[i] <= 'z')
-            {
-                if (foundLetter == 0)
-                {
-                    words++;
-                    foundLetter = 1;
-                }
-                output[i] = buffer[i];
-                characters++;
-            }
-            else
-            {
-                characters++;
-                output[i] = buffer[i];
-            }
-        }
 
-        // Generate the rest of our response information
-        strcat(output, "\nTotal Characters: ");
-        sprintf(numBuff, "%d", characters);
-        strcat(output, numBuff);
-        strcat(output, "\nTotal Words: ");
-        sprintf(numBuff, "%d", words);
-        strcat(output, numBuff);
-        strcat(output, "\n");
-        strcpy(buffer, output);
+
+
+
+        // Check if we have a cached version of the webpage
+
+
+
+
+        // If we have a cached version, foward it to the user
+
+
+
+
+        // Else, go get the web page
+
+
+        // Open a new socket
+
+
+        // Get by hostname
+
+
+
+        // Check if response code is 200
+        // If 200, cashe and foward to user
+        // Else, foward response
+
+        // Get website info and put into list.txt
+
+
+
+
+
 
         // Send client the message size
         bufferLength = htonl(strlen(buffer));
@@ -167,11 +144,6 @@ int main(int argc, char **argv)
             exit(1);
         }
 
-        // Inform user of successful send and reset counters
-        printf("Successfully sent message\n");
-        characters = 0;
-        words = 0;
-        foundLetter = 0;
     }
 
     close (conn_fd); // Close the connection

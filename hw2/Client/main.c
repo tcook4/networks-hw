@@ -22,10 +22,6 @@ int main (int argc, char **argv)
     int dataLength;                 // Length of the data to be sent
     int bufferLength;               // Length of the buffer to be read to
     int portNumber;                 // Port number
-    int quit;                       // Quitting detection
-
-    // Initialization
-    quit = 0;
 
     // Verify we have correct number of arguments
     if (argc != 2)
@@ -71,12 +67,6 @@ int main (int argc, char **argv)
         bzero(input, 1024);
         fgets(input, 1024, stdin);
 
-        // Check if we're quitting
-        if (strcmp(input, "quit\n") == 0)
-        {
-            quit = 1;
-        }
-
         // Send data to server
         // Prepare our buffer
         bzero(buffer, 1024);
@@ -97,12 +87,6 @@ int main (int argc, char **argv)
             perror("Error sending message\n");
         }
 
-        // We can quit now
-        if (quit == 1)
-        {
-            printf("Exiting...\n");
-            break;
-        }
 
         // Listen for server response
         // Receive response size and convert from network order
