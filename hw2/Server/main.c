@@ -23,30 +23,22 @@ int main(int argc, char **argv)
     int bufferLength;                   // Length of message to be sent
     int dataLength;                     // Length of message to be received
     int portNumber;                     // Port number to use if supplied
+    int connected = 0;                  // Connection status to client
 
     FILE *fp;                           // File pointer for
     int webSockFD;                      // File descriptor for our web server
 
-    // Get allow list from file
+
+    char* message = "GET /\r\n HTTP /1.1.";
+
+    char address[100];
+    char *formattedAddress;
+    char *match = "http://";
+    char *match2 = "https://";
 
 
-    // Clear cache on startup
-
-
-
-    // Verify we have correct number of arguments
-    if (argc != 2)
-    {
-        printf("Error: Program usage: %s port_number\n", argv[0]);
-        exit(1);
-    }
-    else
-    {
-        portNumber = atoi(argv[1]);
-    }
-
-
-
+    /*
+    // Connect to client
     // AF_INET - IPv4 IP , Type of socket, protocol
     listen_fd = socket(AF_INET, SOCK_STREAM, 0);
     bzero(&servaddr, sizeof(servaddr));
@@ -71,54 +63,76 @@ int main(int argc, char **argv)
 
     printf("Successfully connected to client!\n");
 
-    // Main body loop
-    while(1)
+    */
+    connected = 1;
+
+
+    // Get allow list from file
+
+    while (connected)
     {
-        // Get input from client
-        // Get message size and convert from network order
-        n = read(conn_fd, (char*)&bufferLength, sizeof(bufferLength));
-        if (n < 0)
+        do
         {
-            perror("Error getting data size\n");
-            exit(1);
-        }
-        dataLength = ntohl(bufferLength);
 
-        // Read the website address
-        bzero(buffer, 1024);
-        n = read(conn_fd, buffer, dataLength);
-        if (n < 0)
+            // Read website
+
+            printf("Enter website: ");
+
+            bzero(address, 100);
+            scanf("%s", &address);
+
+            // Remove http(s) from address for gethostbyname to work
+            formattedAddress = strtok(address, match);
+            if (formattedAddress == NULL) // If we didn't find http, look for https
+            {
+                formattedAddress = strtok(address, match2);
+            }
+            if (formattedAddress == NULL) // If we didn't find either
+            {
+                formattedAddress = address;
+            }
+
+            // Go get the webpage
+            printf("Trying to connect to website\n");
+            webSockFD = connectWebServer(formattedAddress);
+
+            if (webSockFD == -1)
+            {
+                printf("Connection failed, please try again.\n");
+            }
+        }
+        while (webSockFD == -1);
+
+
+        // Send GET request to web server
+        write(webSockFD, message, sizeof(message));
+
+        // Open a file in preparation to recieve data
+        int bytesRead = 0;
+        fp = fopen(formattedAddress, "w");
+
+        printf("opeining file at %s\n", formattedAddress);
+
+        // Read response from web server
+        do
         {
-            perror("Error reading message from client\n");
-            exit(1);
+
+            bzero(buffer, sizeof(buffer));
+
+            bytesRead = read(webSockFD, buffer, sizeof(buffer));
+
+            fprintf(fp, "%s", buffer);
         }
 
+        while (bytesRead > 0);
 
 
-        // Check if the user is allowed to access the web page
-
-
-
-
-
-        // Check if we have a cached version of the webpage
-
-
-
-
-        // If we have a cached version, foward it to the user
-
-
-
-
-        // Else, go get the web page
-
-
-        webSockFD = connectWebServer("www.google.com");
-
+        printf("Done reading\n");
 
         // Get by hostname
 
+
+        fclose(fp);
 
 
 
@@ -130,30 +144,7 @@ int main(int argc, char **argv)
         // Get website info and put into list.txt
 
 
-
-
-
-
-        // Send client the message size
-        bufferLength = htonl(strlen(buffer));
-        n = write(conn_fd, (char*)&bufferLength, sizeof(bufferLength));
-        if (n < 0)
-        {
-            perror("Error sending client data size\n");
-            exit(1);
-        }
-
-        // Write actual message to the client
-        n = write(conn_fd, buffer, strlen(buffer));
-        if (n < 0)
-        {
-            perror("Error sending client message\n");
-            exit(1);
-        }
-
     }
-
-    close (conn_fd); // Close the connection
     return 0;
 }
 
@@ -170,7 +161,7 @@ int connectWebServer(char *website)
     if (sockfd < 0)
     {
         perror("ERROR opening socket");
-        exit(1);
+        return -1;
     }
 
     // assign and address our server
@@ -178,7 +169,7 @@ int connectWebServer(char *website)
     if (server == NULL)
     {
         fprintf(stderr,"ERROR, no such host\n");
-        exit(0);
+        return -1;
     }
 
     // fill in our server address struct
@@ -191,7 +182,7 @@ int connectWebServer(char *website)
     if (connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0)
     {
         perror("ERROR connecting");
-        exit(1);
+        return -1;
     }
 
     printf("Successfully connected to web server on port 80.\n");
