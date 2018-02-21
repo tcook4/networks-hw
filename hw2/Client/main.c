@@ -87,7 +87,6 @@ int main (int argc, char **argv)
             perror("Error sending message\n");
         }
 
-
         // Listen for server response
         // Receive response size and convert from network order
         n = read(sockfd, (char*)&bufferLength, sizeof(bufferLength));

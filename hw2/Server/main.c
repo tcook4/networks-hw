@@ -12,6 +12,8 @@
 #include <string.h>
 #include <stdlib.h>
 
+int connectWebServer(char* website);
+
 int main(int argc, char **argv)
 {
     char buffer[1024];                  // Communication buffer between client and server
@@ -22,7 +24,8 @@ int main(int argc, char **argv)
     int dataLength;                     // Length of message to be received
     int portNumber;                     // Port number to use if supplied
 
-    FILE *fp;
+    FILE *fp;                           // File pointer for
+    int webSockFD;                      // File descriptor for our web server
 
     // Get allow list from file
 
@@ -41,6 +44,8 @@ int main(int argc, char **argv)
     {
         portNumber = atoi(argv[1]);
     }
+
+
 
     // AF_INET - IPv4 IP , Type of socket, protocol
     listen_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -109,10 +114,12 @@ int main(int argc, char **argv)
         // Else, go get the web page
 
 
-        // Open a new socket
+        webSockFD = connectWebServer("www.google.com");
 
 
         // Get by hostname
+
+
 
 
 
@@ -148,4 +155,46 @@ int main(int argc, char **argv)
 
     close (conn_fd); // Close the connection
     return 0;
+}
+
+int connectWebServer(char *website)
+{
+    int sockfd;
+    struct sockaddr_in serv_addr;             // socket structure
+    struct hostent *server;                   // socket host struct
+
+    printf("Connecting to %s\n", website);
+
+    // create a socket point
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0)
+    {
+        perror("ERROR opening socket");
+        exit(1);
+    }
+
+    // assign and address our server
+    server = gethostbyname(website);
+    if (server == NULL)
+    {
+        fprintf(stderr,"ERROR, no such host\n");
+        exit(0);
+    }
+
+    // fill in our server address struct
+    bzero((char *) &serv_addr, sizeof(serv_addr));
+    serv_addr.sin_family = AF_INET;
+    bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr, server->h_length);
+    serv_addr.sin_port = htons(80);
+
+    // connect to our server
+    if (connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0)
+    {
+        perror("ERROR connecting");
+        exit(1);
+    }
+
+    printf("Successfully connected to web server on port 80.\n");
+
+    return sockfd;
 }
