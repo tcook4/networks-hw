@@ -5,5 +5,7 @@ CONFIG -= qt
 
 SOURCES += main.c
 
-HEADERS += \
-    ../Test/scratch
+HEADERS +=
+
+DISTFILES += \
+    old

@@ -14,10 +14,12 @@
 
 int connectWebServer(char* website);
 
+void sendFile(char* filename, int clientSocket);
+
 int main(int argc, char **argv)
 {
     char buffer[1024];                  // Communication buffer between client and server
-    int listen_fd, conn_fd, n;          // File descriptors and error checking
+    int listenFd, clientFd, n;          // File descriptors and error checking
     struct sockaddr_in servaddr;        // Server address structure
     char output[1024];                  // Output message storage
     int bufferLength;                   // Length of message to be sent
@@ -30,11 +32,11 @@ int main(int argc, char **argv)
 
 
     char* message = "GET /\r\n HTTP /1.1.";
-
+    char response[100] = ""; // Storage for first line of http response
     char address[100];
-    char *formattedAddress;
-    char *match = "http://";
-    char *match2 = "https://";
+    char formattedAddress[100];
+    char* searchPtr;
+    char *responseCode;
 
 
     /*
@@ -73,26 +75,33 @@ int main(int argc, char **argv)
     {
         do
         {
-
-            // Read website
-
+            // Read website from client
             printf("Enter website: ");
 
             bzero(address, 100);
+            bzero(formattedAddress, 100);
             scanf("%s", &address);
 
             // Remove http(s) from address for gethostbyname to work
-            formattedAddress = strtok(address, match);
-            if (formattedAddress == NULL) // If we didn't find http, look for https
+            if ((searchPtr = strstr(address, "http://")))
             {
-                formattedAddress = strtok(address, match2);
+                strcpy(formattedAddress, &address[7]);
             }
-            if (formattedAddress == NULL) // If we didn't find either
+            else if ((searchPtr = strstr(address, "https://")))
+            {
+                strcpy(formattedAddress, &address[8]);
+            }
+            else // If we didn't find either
             {
                 formattedAddress = address;
             }
 
-            // Go get the webpage
+
+            // TODO: check cache here for cached version
+
+
+
+            // Connect to the webpage
             printf("Trying to connect to website\n");
             webSockFD = connectWebServer(formattedAddress);
 
@@ -103,36 +112,58 @@ int main(int argc, char **argv)
         }
         while (webSockFD == -1);
 
-
         // Send GET request to web server
-        write(webSockFD, message, sizeof(message));
+        n = write(webSockFD, message, sizeof(message));
+        if (n < 0)
+        {
+            printf("Error writing to website...\n");
+            continue;
+        }
 
         // Open a file in preparation to recieve data
         int bytesRead = 0;
-        fp = fopen(formattedAddress, "w");
-
-        printf("opeining file at %s\n", formattedAddress);
+        fp = fopen(searchPtr, "w+");
+        if (fp == NULL)
+        {
+            perror("Error opening file\n");
+        }
 
         // Read response from web server
         do
         {
-
+            // Zero our buffer, read from the web page, and store buffer in our file
             bzero(buffer, sizeof(buffer));
-
             bytesRead = read(webSockFD, buffer, sizeof(buffer));
-
             fprintf(fp, "%s", buffer);
         }
-
         while (bytesRead > 0);
+        printf("Webpage retrieved\n");
+
+        // Rewrind to beginning of file and grab first line
+        fseek(fp, 0, SEEK_SET);
+        fgets(response, 100, fp);
+
+        // Check response code
+        if (strstr(response, "200 OK"))
+        {
+            printf("Response code 200 - sending webpage to client\n");
+            fclose(fp);
+            sendFile(formattedAddress, clientFd);
+
+            // Append to list.txt
 
 
-        printf("Done reading\n");
 
-        // Get by hostname
+        }
+        else
+        {
+            // Send response
+            printf("Webserver response: %s\n", response);
 
-
-        fclose(fp);
+            // Close file and remove cached version
+            fclose(fp);
+            remove(formattedAddress);
+        }
 
 
 
@@ -154,7 +185,7 @@ int connectWebServer(char *website)
     struct sockaddr_in serv_addr;             // socket structure
     struct hostent *server;                   // socket host struct
 
-    printf("Connecting to %s\n", website);
+    printf("Connecting to %s...\n", website);
 
     // create a socket point
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -188,4 +219,9 @@ int connectWebServer(char *website)
     printf("Successfully connected to web server on port 80.\n");
 
     return sockfd;
+}
+
+void sendFile(char *filename, int clientSocket)
+{
+
 }
