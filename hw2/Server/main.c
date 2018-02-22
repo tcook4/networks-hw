@@ -258,5 +258,20 @@ int connectWebServer(char *website)
 
 void sendFile(char *filename, int clientSocket)
 {
+    printf("Sending file to client...\n");
+    FILE *fp;
+    int n;
+    char buffer[1024];
+    fp = fopen(filename, "r");
 
+    do
+    {
+        fread(buffer, sizeof(char), 1024, fp);
+        n = write(clientSocket, buffer, sizeof(buffer));
+    }
+    while (n > 0);
+
+    fclose(fp);
+
+    printf("Done sending file\n");
 }
