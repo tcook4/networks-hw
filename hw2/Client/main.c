@@ -22,6 +22,8 @@ int main (int argc, char **argv)
     int dataLength;                 // Length of the data to be sent
     int bufferLength;               // Length of the buffer to be read to
     int portNumber;                 // Port number
+    char* pos;                      // Remove newline from fgets
+
 
     // Verify we have correct number of arguments
     if (argc != 2)
@@ -46,7 +48,11 @@ int main (int argc, char **argv)
     servaddr.sin_port=htons(portNumber); // Server port number
 
     // Convert IPv4 and IPv6 addresses from text to binary form
-    inet_pton(AF_INET,"129.120.151.94",&(servaddr.sin_addr));
+
+    // inet_pton(AF_INET,"129.120.151.94",&(servaddr.sin_addr));
+    // use localhost for testing
+    inet_pton(AF_INET,"localhost",&(servaddr.sin_addr));
+
 
     // Connect to the server
     if(connect(sockfd,(struct sockaddr *)&servaddr,sizeof(servaddr)) < 0)
@@ -66,6 +72,13 @@ int main (int argc, char **argv)
         printf("Input: ");
         bzero(input, 1024);
         fgets(input, 1024, stdin);
+
+        // Remove newline
+        if ((pos=strchr(input, '\n')) != NULL)
+        {
+            *pos = '\0';
+        }
+
 
         // Send data to server
         // Prepare our buffer
@@ -88,6 +101,7 @@ int main (int argc, char **argv)
         }
 
         // Listen for server response
+        /*
         // Receive response size and convert from network order
         n = read(sockfd, (char*)&bufferLength, sizeof(bufferLength));
         if (n < 0)
@@ -103,9 +117,17 @@ int main (int argc, char **argv)
         {
             perror("Error receiving message\n");
         }
+        */
 
         // Print server response to the user
         printf("Server response: \n");
+
+        do
+        {
+            n = read(sockfd, buffer, sizeof(buffer));
+            printf("%s", buffer);
+        }
+        while (n > 0);
         printf("%s\n", buffer);
     }
 

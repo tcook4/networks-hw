@@ -33,39 +33,48 @@ int main(int argc, char **argv)
 
     char* message = "GET /\r\n HTTP /1.1.";
     char response[100] = ""; // Storage for first line of http response
-    char address[100];
+    char address[1024];
     char formattedAddress[100];
     char* searchPtr;
     char *responseCode;
 
+    // Verify we have correct number of arguments
+    if (argc != 2)
+    {
+        printf("Error: Program usage: %s port_number\n", argv[0]);
+        exit(1);
+    }
+    else
+    {
+        portNumber = atoi(argv[1]);
+    }
 
-    /*
+    //portNumber = 8082;
+
+
     // Connect to client
     // AF_INET - IPv4 IP , Type of socket, protocol
-    listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+    listenFd = socket(AF_INET, SOCK_STREAM, 0);
     bzero(&servaddr, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = htons(INADDR_ANY);
     servaddr.sin_port = htons(portNumber);
 
     // Binds the above details to the socket
-    bind(listen_fd, (struct sockaddr *) &servaddr, sizeof(servaddr));
+    bind(listenFd, (struct sockaddr *) &servaddr, sizeof(servaddr));
 
     // Start listening to incoming connections
-    listen(listen_fd, 10);
+    listen(listenFd, 10);
     printf("Listening for connection...\n");
 
     // Accept an incoming connection
-    conn_fd = accept(listen_fd, (struct sockaddr*)NULL, NULL);
-    if (conn_fd < 0) // verify we accepted correctly
+    clientFd = accept(listenFd, (struct sockaddr*)NULL, NULL);
+    if (clientFd < 0) // verify we accepted correctly
     {
         perror("ERROR on accept");
         exit(1);
     }
-
     printf("Successfully connected to client!\n");
-
-    */
     connected = 1;
 
 
@@ -75,27 +84,52 @@ int main(int argc, char **argv)
     {
         do
         {
-            // Read website from client
-            printf("Enter website: ");
-
-            bzero(address, 100);
+            bzero(address, 1024);
             bzero(formattedAddress, 100);
-            scanf("%s", &address);
+            bzero(buffer, 1024);
+
+            // printf("Enter website: ");
+            // scanf("%s", &address);
+
+
+            // Get message size and convert from network order
+            n = read(clientFd, (char*)&bufferLength, sizeof(bufferLength));
+            if (n < 0)
+            {
+                perror("Error getting data size\n");
+                exit(1);
+            }
+            dataLength = ntohl(bufferLength);
+
+            // Read the website address
+            bzero(buffer, 1024);
+            n = read(clientFd, buffer, dataLength);
+            if (n < 0)
+            {
+                perror("Error reading message from client\n");
+                exit(1);
+            }
+
+
+            strcpy(address, buffer);
+            printf("address is %s\n", address);
+
 
             // Remove http(s) from address for gethostbyname to work
             if ((searchPtr = strstr(address, "http://")))
             {
-                strcpy(formattedAddress, &address[7]);
+                strncpy(formattedAddress, &address[7], 100);
             }
             else if ((searchPtr = strstr(address, "https://")))
             {
-                strcpy(formattedAddress, &address[8]);
+                strncpy(formattedAddress, &address[8], 100);
             }
             else // If we didn't find either
             {
-                formattedAddress = address;
+                strncpy(formattedAddress, address, 100);
             }
 
+            printf("formatted address is %s\n", formattedAddress);
 
             // TODO: check cache here for cached version
 
@@ -108,6 +142,7 @@ int main(int argc, char **argv)
             if (webSockFD == -1)
             {
                 printf("Connection failed, please try again.\n");
+                write(clientFd, "error", 5);
             }
         }
         while (webSockFD == -1);
@@ -122,7 +157,7 @@ int main(int argc, char **argv)
 
         // Open a file in preparation to recieve data
         int bytesRead = 0;
-        fp = fopen(searchPtr, "w+");
+        fp = fopen(formattedAddress, "w+");
         if (fp == NULL)
         {
             perror("Error opening file\n");
