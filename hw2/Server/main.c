@@ -251,15 +251,18 @@ int connectWebServer(char *website)
     return sockfd;
 }
 
+
+// Send a file to a client
+// This function is used to send a cached HTTP webpage to a client
 void sendFile(char *filename, int clientSocket)
 {
-    int fileSize; // Length of the file we're finding
-    FILE *fp;   // File pointer
-    int n; // Write bits
-    char buffer[1024]; // Buffer
-    uint32_t networkFileSize;
-    int bytesRead;
-    int offset; // keep track of our file position
+    FILE *fp;                       // File pointer
+    char buffer[1024];              // Buffer used to store and send file information
+    uint32_t networkFileSize;       // Network order filesize
+    int fileSize;                   // Length of the file we're sending
+    int sent;                       // Bits sent in a network write() operation
+    int bytesRead;                  // Number of bytes read from our file
+    int offset;                     // Used to keep track of our file position
 
 
     printf("Sending file to client...\n");
@@ -276,8 +279,8 @@ void sendFile(char *filename, int clientSocket)
 
     // Convert to network order and send to client
     networkFileSize = htonl(fileSize);
-    n = write(clientSocket, &networkFileSize, sizeof(networkFileSize));
-    if (n < 0)
+    sent = write(clientSocket, &networkFileSize, sizeof(networkFileSize));
+    if (sent < 0)
     {
         perror("Error sending file size: \n");
     }
@@ -288,35 +291,35 @@ void sendFile(char *filename, int clientSocket)
     // Send the client the file
     printf("Preparing to send file...\n");
     bytesRead = 0;
-     while ((bytesRead = fread(buffer, sizeof(char), sizeof(buffer), fp)) > 0)
-     {
-         // Make sure we have a successful send before incrementing our position
-         offset = 0;
-         while ((n = write(clientSocket, buffer + offset, bytesRead)) > 0)
-         {
-             // If we sent something, increment our positions
-             if (n > 0)
-             {
-                 offset += n;
-                 bytesRead -= n;
-             }
-         }
-     }
-     // close our file and notify user operation is completed
-     printf("File successfully sent!\n\n");
+    while ((bytesRead = fread(buffer, sizeof(char), sizeof(buffer), fp)) > 0)
+    {
+        // Make sure we have a successful send before incrementing our position
+        offset = 0;
+        while ((sent = write(clientSocket, buffer + offset, bytesRead)) > 0)
+        {
+            // If we sent something, increment our positions
+            if (sent > 0)
+            {
+                offset += sent;
+                bytesRead -= sent;
+            }
+        }
+    }
 
+    // Close our file and notify user operation is completed
+    printf("File successfully sent!\n\n");
     fclose(fp);
 }
 
 
+// Send a message to a client socket connection
+// This function is used when seding HTTP response codes (other than 200)
 void sendMessage(const char* message, int clientSocket)
 {
-    int n;
-    uint32_t convertedMsgSize;
+    int n;                      // Number of bytes sent
+    uint32_t convertedMsgSize;  // Size of the message we're sending
 
-    printf("sending : %d\n", strlen(message));
-
-    // Send client response size
+    // Send client message size
     convertedMsgSize = htonl(strlen(message));
     n = write(clientSocket, &convertedMsgSize, sizeof(convertedMsgSize));
     if (n < 0)
@@ -324,11 +327,10 @@ void sendMessage(const char* message, int clientSocket)
         perror("Error sending client message size\n");
     }
 
-    // Send response
+    // Send message
     n = (write(clientSocket, message, strlen(message)));
     if (n < 0)
     {
         perror("Error sending client response\n");
     }
-
 }
