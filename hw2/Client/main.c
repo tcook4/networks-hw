@@ -19,7 +19,6 @@ int main (int argc, char **argv)
     struct sockaddr_in servaddr;    // Server address structure
     char buffer[1024];              // Sent and received message buffer
     char input[1024];               // fgets() input buffer
-    int dataLength;                 // Length of the data to be sent
     int bufferLength;               // Length of the buffer to be read to
     int portNumber;                 // Port number
     char* pos;                      // Remove newline from fgets
@@ -73,9 +72,12 @@ int main (int argc, char **argv)
     // Ask user for input then display server response
     while (1)
     {
+        // Initialize our buffers
+        bzero(input, 1024);
+        bzero(buffer, 1024);
+
         // Get input from user
         printf("Input: ");
-        bzero(input, 1024);
         fgets(input, 1024, stdin);
 
         // Remove newline
@@ -83,11 +85,6 @@ int main (int argc, char **argv)
         {
             *pos = '\0';
         }
-
-
-        // Send data to server
-        // Prepare our buffer
-        bzero(buffer, 1024);
         strcpy(buffer, input);
 
         // Find and send the size of the message after converting to network order
@@ -106,28 +103,9 @@ int main (int argc, char **argv)
         }
 
         // Listen for server response
-        /*
-        // Receive response size and convert from network order
-        n = read(sockfd, (char*)&bufferLength, sizeof(bufferLength));
-        if (n < 0)
-        {
-            perror("Error receiving message size\n");
-        }
-        dataLength = ntohl(bufferLength);
-
-        // Zero our buffer and read the message body
-        bzero(buffer, 1024);
-        n = read(sockfd, buffer, dataLength);
-        if (n < 0)
-        {
-            perror("Error receiving message\n");
-        }
-        */
-
         printf("\nServer response: \n\n");
 
-
-        // Read in size of webpage and convert to host order
+        // Read in size of response and convert to host order
         n = read(sockfd, &networkFileLength, sizeof(networkFileLength));
         if (n < 0)
         {
@@ -149,7 +127,7 @@ int main (int argc, char **argv)
             }
         }
 
-        printf("\n\nWebpage successfully recieved\n");
+        printf("\nData successfully recieved\n");
     }
 
     return 0;

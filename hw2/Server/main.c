@@ -26,30 +26,27 @@ int main(int argc, char **argv)
     char buffer[1024];                  // Communication buffer between client and server
     int listenFd, clientFd, n;          // File descriptors and error checking
     struct sockaddr_in servaddr;        // Server address structure
-    char readBuf[512];                  // Read buffer for list.txt
-    int bufferLength;                   // Length of message to be sent
-    int dataLength;                     // Length of message to be received
+    int netDataLength, hostDataLength;  // Length of messages in network / host order
     int portNumber;                     // Port number to use if supplied
-    int connected = 0;                  // Connection status to client
-    int cached;                         // Bool for finding a cached version of the site
-    int bytesRead;
-
+    int connected, cached;              // Bools for connection and cached status
+    int bytesRead;                      // Number of bytes read in a fread() operation
+    char readBuf[512];                  // Read buffer for list.txt file IO
     FILE *fp;                           // File pointer for writing web server data
     FILE *listFp;                       // File pointer for list.txt
-    int webSockFD;                      // File descriptor for our web server
+    int webSockFd;                      // File descriptor for our web server
+    char response[100] = "";            // Storage for first line of http response
+    char address[1024];                 // Storage for address to search
+    char fmtAddr[100];                  // Formatted domain name sotrage
+    char* searchPtr;                    // Search ptr for http detection
+    time_t rawtime;                     // Time info
+    struct tm *timeinfo;                // Time struct
+    char timeText[16];                  // Storage for time string
 
-
+    // Set our http GET message
     char* message = "GET /\r\n HTTP /1.1.";
-    char response[100] = ""; // Storage for first line of http response
-    char address[1024];
-    char formattedAddress[100];
-    char* searchPtr;
-    char timeText[16];
 
-
-    time_t rawtime;
-    struct tm *timeinfo;
-
+    // Not connected to a clientyet
+    connected = 0;
 
     /*
     // Verify we have correct number of arguments
@@ -92,28 +89,28 @@ int main(int argc, char **argv)
     connected = 1;
 
 
-    // Get allow list from file
+    // TODO: Get allow list from file
 
     while (connected)
     {
         // Initialize our buffers
         bzero(address, 1024);
-        bzero(formattedAddress, 100);
+        bzero(fmtAddr, 100);
         bzero(buffer, 1024);
-        bufferLength = 0;
+        netDataLength = 0;
         cached = 0;
 
         // Get message size and convert from network order
-        n = read(clientFd, (char*)&bufferLength, sizeof(bufferLength));
+        n = read(clientFd, (char*)&netDataLength, sizeof(netDataLength));
         if (n < 0)
         {
             perror("Error getting data size\n");
         }
-        dataLength = ntohl(bufferLength);
+        hostDataLength = ntohl(netDataLength);
 
         // Read the website address
         bzero(buffer, 1024);
-        n = read(clientFd, buffer, dataLength);
+        n = read(clientFd, buffer, hostDataLength);
         if (n < 0)
         {
             perror("Error reading message from client\n");
@@ -123,15 +120,15 @@ int main(int argc, char **argv)
         // Remove http(s) from address for gethostbyname to work
         if ((searchPtr = strstr(address, "http://")))
         {
-            strncpy(formattedAddress, &address[7], 100);
+            strncpy(fmtAddr, &address[7], 100);
         }
         else if ((searchPtr = strstr(address, "https://")))
         {
-            strncpy(formattedAddress, &address[8], 100);
+            strncpy(fmtAddr, &address[8], 100);
         }
         else // If we didn't find either
         {
-            strncpy(formattedAddress, address, 100);
+            strncpy(fmtAddr, address, 100);
         }
 
         // Check cache for cached version
@@ -141,10 +138,10 @@ int main(int argc, char **argv)
         {
             while (fgets(readBuf, sizeof(readBuf)-1, listFp))
             {
-                if(strstr(readBuf, formattedAddress))
+                if(strstr(readBuf, fmtAddr))
                 {
-                    printf("Found %s in cache, fowarding to user\n", formattedAddress);
-                    sendFile(formattedAddress, clientFd);
+                    printf("Found %s in cache, fowarding to user...\n", fmtAddr);
+                    sendFile(fmtAddr, clientFd);
                     cached = 1;
                     break;
                 }
@@ -155,27 +152,28 @@ int main(int argc, char **argv)
         if (!cached)
         {
             // Connect to the webpage
-            webSockFD = connectWebServer(formattedAddress);
-            if (webSockFD == -1)
+            webSockFd = connectWebServer(fmtAddr);
+            if (webSockFd == -1)
             {
-                printf("Connection failed, please try again.\n");
+                printf("Connection failed: website not found\n\n");
                 sendMessage("Website not found, please try again\n", clientFd);
                 continue;
             }
 
             // Send GET request to web server
-            n = write(webSockFD, message, sizeof(message));
+            n = write(webSockFd, message, sizeof(message));
             if (n < 0)
             {
-                printf("Error writing to website...\n");
+                perror("Error writing to website...\n");
                 continue;
             }
 
             // Open the file in preparation to recieve data
-            fp = fopen(formattedAddress, "w+");
+            fp = fopen(fmtAddr, "w+");
             if (fp == NULL)
             {
                 perror("Error opening file\n");
+                continue;
             }
 
             // Read response from web server
@@ -184,7 +182,7 @@ int main(int argc, char **argv)
             {
                 // Zero our buffer, read from the web page, and store buffer in our file
                 bzero(buffer, sizeof(buffer));
-                bytesRead = read(webSockFD, buffer, sizeof(buffer));
+                bytesRead = read(webSockFd, buffer, sizeof(buffer));
                 fprintf(fp, "%s", buffer);
             }
             while (bytesRead > 0);
@@ -192,22 +190,22 @@ int main(int argc, char **argv)
             // Rewrind to beginning of file and grab first line
             fseek(fp, 0, SEEK_SET);
             fgets(response, 100, fp);
+            fclose(fp);
 
             // If response code is 200, send page to client
             if (strstr(response, "200 OK"))
             {
                 printf("Response code 200 - sending webpage to client\n");
-                fclose(fp);
-                sendFile(formattedAddress, clientFd);
+                sendFile(fmtAddr, clientFd);
 
                 // Get the time and append it to our address string
                 time(&rawtime);
                 timeinfo = localtime(&rawtime);
                 strftime(timeText, sizeof(timeText)-1, "%Y%m%d%H%M%S", timeinfo);
                 timeText[14] = 0;
-                strcat(formattedAddress, " ");
-                strcat(formattedAddress, timeText);
-                strcat(formattedAddress, "\n");
+                strcat(fmtAddr, " ");
+                strcat(fmtAddr, timeText);
+                strcat(fmtAddr, "\n");
 
                 // Append to list.txt
                 listFp = fopen("list.txt", "a");
@@ -215,7 +213,7 @@ int main(int argc, char **argv)
                 {
                     perror("Error opening list.txt\n");
                 }
-                fprintf(listFp, "%s", formattedAddress);
+                fprintf(listFp, "%s", fmtAddr);
                 fclose(listFp);
             }
             // If response not 200, send the response and delete cached webpage
@@ -226,9 +224,8 @@ int main(int argc, char **argv)
                 // Send response to client
                 sendMessage(response, clientFd);
 
-                // Close file and remove cached version
-                fclose(fp);
-                remove(formattedAddress);
+                // Remove cached version
+                remove(fmtAddr);
             }
         }
     }
