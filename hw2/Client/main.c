@@ -135,8 +135,6 @@ int main (int argc, char **argv)
         }
         fileLength = ntohl(networkFileLength);
 
-        printf("trying to recieve %d\n", fileLength);
-
         // Print server response
         // TODO: check for EINTR?
         while (((n = read(sockfd, buffer, sizeof(buffer))) > 0) && (fileLength > 0))
