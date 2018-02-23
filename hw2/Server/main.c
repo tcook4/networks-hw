@@ -16,16 +16,20 @@ int connectWebServer(char* website);
 
 void sendFile(char* filename, int clientSocket);
 
+void sendMessage(const char *message, int clientSocket);
+
 int main(int argc, char **argv)
 {
     char buffer[1024];                  // Communication buffer between client and server
-    int listenFd, clientFd, n;          // File descriptors and error checking
+    int listenFd, clientSocket, n;          // File descriptors and error checking
     struct sockaddr_in servaddr;        // Server address structure
     char output[1024];                  // Output message storage
     int bufferLength;                   // Length of message to be sent
     int dataLength;                     // Length of message to be received
     int portNumber;                     // Port number to use if supplied
     int connected = 0;                  // Connection status to client
+    int msgSize;
+    uint32_t convertedMsgSize; // converted message size
 
     FILE *fp;                           // File pointer for
     int webSockFD;                      // File descriptor for our web server
@@ -70,8 +74,8 @@ int main(int argc, char **argv)
     printf("Listening for connection...\n");
 
     // Accept an incoming connection
-    clientFd = accept(listenFd, (struct sockaddr*)NULL, NULL);
-    if (clientFd < 0) // verify we accepted correctly
+    clientSocket = accept(listenFd, (struct sockaddr*)NULL, NULL);
+    if (clientSocket < 0) // verify we accepted correctly
     {
         perror("ERROR on accept");
         exit(1);
@@ -86,33 +90,26 @@ int main(int argc, char **argv)
     {
         do
         {
+            // Initialize our buffers
             bzero(address, 1024);
             bzero(formattedAddress, 100);
             bzero(buffer, 1024);
 
-            // printf("Enter website: ");
-            // scanf("%s", &address);
-
-
             // Get message size and convert from network order
-            n = read(clientFd, (char*)&bufferLength, sizeof(bufferLength));
+            n = read(clientSocket, (char*)&bufferLength, sizeof(bufferLength));
             if (n < 0)
             {
                 perror("Error getting data size\n");
-                exit(1);
             }
             dataLength = ntohl(bufferLength);
 
             // Read the website address
             bzero(buffer, 1024);
-            n = read(clientFd, buffer, dataLength);
+            n = read(clientSocket, buffer, dataLength);
             if (n < 0)
             {
                 perror("Error reading message from client\n");
-                exit(1);
             }
-
-
             strcpy(address, buffer);
             printf("address is %s\n", address);
 
@@ -130,11 +127,11 @@ int main(int argc, char **argv)
             {
                 strncpy(formattedAddress, address, 100);
             }
-
             printf("formatted address is %s\n", formattedAddress);
 
-            // TODO: check cache here for cached version
 
+
+            // TODO: check cache here for cached version
 
 
             // Connect to the webpage
@@ -144,7 +141,7 @@ int main(int argc, char **argv)
             if (webSockFD == -1)
             {
                 printf("Connection failed, please try again.\n");
-                write(clientFd, "error", 5);
+                sendMessage("Error, please try again", clientSocket);
             }
         }
         while (webSockFD == -1);
@@ -185,7 +182,7 @@ int main(int argc, char **argv)
         {
             printf("Response code 200 - sending webpage to client\n");
             fclose(fp);
-            sendFile(formattedAddress, clientFd);
+            sendFile(formattedAddress, clientSocket);
 
             // Append to list.txt
 
@@ -194,20 +191,16 @@ int main(int argc, char **argv)
         }
         else
         {
-            // Send response
-            printf("Webserver response: %s\n", response);
+            // Response code not 200 - send response and delete cached version
+            printf("Response code not 200... response: %s\n", response);
+
+            sendMessage(response, clientSocket);
 
             // Close file and remove cached version
             fclose(fp);
             remove(formattedAddress);
         }
 
-
-
-
-        // Check if response code is 200
-        // If 200, cashe and foward to user
-        // Else, foward response
 
         // Get website info and put into list.txt
 
@@ -269,9 +262,7 @@ void sendFile(char *filename, int clientSocket)
     int offset; // keep track of our file position
 
 
-
     printf("Sending file to client...\n");
-
     // Open file
     fp = fopen(filename, "r");
     if (fp == NULL)
@@ -294,16 +285,16 @@ void sendFile(char *filename, int clientSocket)
     // Seek back to the beginning
     rewind(fp);
 
+    // Send the client the file
     printf("Preparing to send file...\n");
-
     bytesRead = 0;
      while ((bytesRead = fread(buffer, sizeof(char), sizeof(buffer), fp)) > 0)
      {
-         // make sure we have a successful send before incrementing our position
+         // Make sure we have a successful send before incrementing our position
          offset = 0;
          while ((n = write(clientSocket, buffer + offset, bytesRead)) > 0)
          {
-             // if we sent something, increment our positions
+             // If we sent something, increment our positions
              if (n > 0)
              {
                  offset += n;
@@ -312,9 +303,32 @@ void sendFile(char *filename, int clientSocket)
          }
      }
      // close our file and notify user operation is completed
-     printf("File successfully uploaded!\n");
+     printf("File successfully sent!\n\n");
 
     fclose(fp);
+}
 
-    printf("Done sending file\n");
+
+void sendMessage(const char* message, int clientSocket)
+{
+    int n;
+    uint32_t convertedMsgSize;
+
+    printf("sending : %d\n", strlen(message));
+
+    // Send client response size
+    convertedMsgSize = htonl(strlen(message));
+    n = write(clientSocket, &convertedMsgSize, sizeof(convertedMsgSize));
+    if (n < 0)
+    {
+        perror("Error sending client message size\n");
+    }
+
+    // Send response
+    n = (write(clientSocket, message, strlen(message)));
+    if (n < 0)
+    {
+        perror("Error sending client response\n");
+    }
+
 }

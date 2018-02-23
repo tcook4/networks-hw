@@ -133,7 +133,9 @@ int main (int argc, char **argv)
         {
             perror("Error recieving message size from server:\n");
         }
-        fileLength = ntohl((networkFileLength));
+        fileLength = ntohl(networkFileLength);
+
+        printf("trying to recieve %d\n", fileLength);
 
         // Print server response
         // TODO: check for EINTR?
@@ -142,14 +144,11 @@ int main (int argc, char **argv)
             printf("%s", buffer);
             fileLength -= n; // Decrement remaining bytes to be read
 
-
-            // not sure if need this
+            // Check if we're done
             if (fileLength == 0)
             {
                 break;
             }
-
-
         }
 
         printf("\n\nWebpage successfully recieved\n");
