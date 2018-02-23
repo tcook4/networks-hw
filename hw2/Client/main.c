@@ -27,6 +27,7 @@ int main (int argc, char **argv)
     int fileLength;                 // Host order file length
 
 
+    /*
     // Verify we have correct number of arguments
     if (argc != 2)
     {
@@ -37,6 +38,8 @@ int main (int argc, char **argv)
     {
         portNumber = atoi(argv[1]);
     }
+    */
+    portNumber = 8855;
 
     // AF_INET - IPv4 IP , Type of socket, protocol
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -121,7 +124,7 @@ int main (int argc, char **argv)
         }
         */
 
-        printf("Server response: \n");
+        printf("\nServer response: \n\n");
 
 
         // Read in size of webpage and convert to host order
@@ -139,15 +142,17 @@ int main (int argc, char **argv)
             printf("%s", buffer);
             fileLength -= n; // Decrement remaining bytes to be read
 
-            /*
+
             // not sure if need this
             if (fileLength == 0)
             {
                 break;
             }
-            */
+
 
         }
+
+        printf("\n\nWebpage successfully recieved\n");
     }
 
     return 0;
