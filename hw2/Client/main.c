@@ -23,6 +23,8 @@ int main (int argc, char **argv)
     int bufferLength;               // Length of the buffer to be read to
     int portNumber;                 // Port number
     char* pos;                      // Remove newline from fgets
+    uint32_t networkFileLength;     // Network order file length
+    int fileLength;                 // Host order file length
 
 
     // Verify we have correct number of arguments
@@ -119,16 +121,33 @@ int main (int argc, char **argv)
         }
         */
 
-        // Print server response to the user
         printf("Server response: \n");
 
-        do
+
+        // Read in size of webpage and convert to host order
+        n = read(sockfd, &networkFileLength, sizeof(networkFileLength));
+        if (n < 0)
         {
-            n = read(sockfd, buffer, sizeof(buffer));
-            printf("%s", buffer);
+            perror("Error recieving message size from server:\n");
         }
-        while (n > 0);
-        printf("%s\n", buffer);
+        fileLength = ntohl((networkFileLength));
+
+        // Print server response
+        // TODO: check for EINTR?
+        while (((n = read(sockfd, buffer, sizeof(buffer))) > 0) && (fileLength > 0))
+        {
+            printf("%s", buffer);
+            fileLength -= n; // Decrement remaining bytes to be read
+
+            /*
+            // not sure if need this
+            if (fileLength == 0)
+            {
+                break;
+            }
+            */
+
+        }
     }
 
     return 0;
