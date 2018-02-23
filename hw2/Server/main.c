@@ -38,6 +38,7 @@ int main(int argc, char **argv)
     char* searchPtr;
     char *responseCode;
 
+    /*
     // Verify we have correct number of arguments
     if (argc != 2)
     {
@@ -48,8 +49,9 @@ int main(int argc, char **argv)
     {
         portNumber = atoi(argv[1]);
     }
+    */
 
-    //portNumber = 8082;
+    portNumber = 8855;
 
 
     // Connect to client
@@ -258,18 +260,59 @@ int connectWebServer(char *website)
 
 void sendFile(char *filename, int clientSocket)
 {
-    printf("Sending file to client...\n");
-    FILE *fp;
-    int n;
-    char buffer[1024];
-    fp = fopen(filename, "r");
+    int fileSize; // Length of the file we're finding
+    FILE *fp;   // File pointer
+    int n; // Write bits
+    char buffer[1024]; // Buffer
+    uint32_t networkFileSize;
+    int bytesRead;
+    int offset; // keep track of our file position
 
-    do
+
+
+    printf("Sending file to client...\n");
+
+    // Open file
+    fp = fopen(filename, "r");
+    if (fp == NULL)
     {
-        fread(buffer, sizeof(char), 1024, fp);
-        n = write(clientSocket, buffer, sizeof(buffer));
+        perror("File open failed: \n");
     }
-    while (n > 0);
+
+    // Seek to the end and find file length
+    fseek(fp, 0, SEEK_END);
+    fileSize = (int)ftell(fp);
+
+    // Convert to network order and send to client
+    networkFileSize = htonl(fileSize);
+    n = write(clientSocket, &networkFileSize, sizeof(networkFileSize));
+    if (n < 0)
+    {
+        perror("Error sending file size: \n");
+    }
+
+    // Seek back to the beginning
+    rewind(fp);
+
+    printf("Preparing to send file...\n");
+
+    bytesRead = 0;
+     while ((bytesRead = fread(buffer, sizeof(char), sizeof(buffer), fp)) > 0)
+     {
+         // make sure we have a successful send before incrementing our position
+         offset = 0;
+         while ((n = write(clientSocket, buffer + offset, bytesRead)) > 0)
+         {
+             // if we sent something, increment our positions
+             if (n > 0)
+             {
+                 offset += n;
+                 bytesRead -= n;
+             }
+         }
+     }
+     // close our file and notify user operation is completed
+     printf("File successfully uploaded!\n");
 
     fclose(fp);
 
