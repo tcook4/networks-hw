@@ -11,6 +11,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
+
 
 int connectWebServer(char* website);
 
@@ -18,20 +20,22 @@ void sendFile(char* filename, int clientSocket);
 
 void sendMessage(const char *message, int clientSocket);
 
+
 int main(int argc, char **argv)
 {
     char buffer[1024];                  // Communication buffer between client and server
-    int listenFd, clientSocket, n;          // File descriptors and error checking
+    int listenFd, clientFd, n;          // File descriptors and error checking
     struct sockaddr_in servaddr;        // Server address structure
     char output[1024];                  // Output message storage
+    char readBuf[512];                  // Read buffer for list.txt
     int bufferLength;                   // Length of message to be sent
     int dataLength;                     // Length of message to be received
     int portNumber;                     // Port number to use if supplied
     int connected = 0;                  // Connection status to client
-    int msgSize;
-    uint32_t convertedMsgSize; // converted message size
+    int bytesRead;
 
-    FILE *fp;                           // File pointer for
+    FILE *fp;                           // File pointer for writing web server data
+    FILE *listFp;                       // File pointer for list.txt
     int webSockFD;                      // File descriptor for our web server
 
 
@@ -41,6 +45,12 @@ int main(int argc, char **argv)
     char formattedAddress[100];
     char* searchPtr;
     char *responseCode;
+    char timeText[16];
+
+
+    time_t rawtime;
+    struct tm *timeinfo;
+
 
     /*
     // Verify we have correct number of arguments
@@ -55,11 +65,10 @@ int main(int argc, char **argv)
     }
     */
 
-    portNumber = 8855;
+    portNumber = 8856;
 
 
     // Connect to client
-    // AF_INET - IPv4 IP , Type of socket, protocol
     listenFd = socket(AF_INET, SOCK_STREAM, 0);
     bzero(&servaddr, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
@@ -74,8 +83,8 @@ int main(int argc, char **argv)
     printf("Listening for connection...\n");
 
     // Accept an incoming connection
-    clientSocket = accept(listenFd, (struct sockaddr*)NULL, NULL);
-    if (clientSocket < 0) // verify we accepted correctly
+    clientFd = accept(listenFd, (struct sockaddr*)NULL, NULL);
+    if (clientFd < 0) // verify we accepted correctly
     {
         perror("ERROR on accept");
         exit(1);
@@ -96,7 +105,7 @@ int main(int argc, char **argv)
             bzero(buffer, 1024);
 
             // Get message size and convert from network order
-            n = read(clientSocket, (char*)&bufferLength, sizeof(bufferLength));
+            n = read(clientFd, (char*)&bufferLength, sizeof(bufferLength));
             if (n < 0)
             {
                 perror("Error getting data size\n");
@@ -105,7 +114,7 @@ int main(int argc, char **argv)
 
             // Read the website address
             bzero(buffer, 1024);
-            n = read(clientSocket, buffer, dataLength);
+            n = read(clientFd, buffer, dataLength);
             if (n < 0)
             {
                 perror("Error reading message from client\n");
@@ -127,12 +136,30 @@ int main(int argc, char **argv)
             {
                 strncpy(formattedAddress, address, 100);
             }
-            printf("formatted address is %s\n", formattedAddress);
 
 
-
-            // TODO: check cache here for cached version
-
+            // Check cache for cached version
+            bzero(readBuf, 512);
+            listFp = fopen("list.txt", "r");
+            printf("trying to open file\n");
+            if (listFp == NULL) // We haven't created a visit list yet
+            {
+                printf("no list yet\n");
+            }
+            else
+            {
+                printf("trying to fgets\n");
+                while (fgets(readBuf, sizeof(readBuf)-1, listFp))
+                {
+                    printf("trying to strstr\n");
+                    if(strstr(readBuf, formattedAddress))
+                    {
+                        printf("Found website in cache, fowarding to user\n");
+                        sendFile(formattedAddress, clientFd);
+                    }
+                }
+                fclose(listFp);
+            }
 
             // Connect to the webpage
             printf("Trying to connect to website\n");
@@ -141,7 +168,7 @@ int main(int argc, char **argv)
             if (webSockFD == -1)
             {
                 printf("Connection failed, please try again.\n");
-                sendMessage("Error, please try again", clientSocket);
+                sendMessage("Error, please try again", clientFd);
             }
         }
         while (webSockFD == -1);
@@ -154,15 +181,16 @@ int main(int argc, char **argv)
             continue;
         }
 
-        // Open a file in preparation to recieve data
-        int bytesRead = 0;
+        // Open the file in preparation to recieve data
         fp = fopen(formattedAddress, "w+");
         if (fp == NULL)
         {
             perror("Error opening file\n");
         }
 
+        printf("about to read from web\n");
         // Read response from web server
+        bytesRead = 0;
         do
         {
             // Zero our buffer, read from the web page, and store buffer in our file
@@ -182,19 +210,34 @@ int main(int argc, char **argv)
         {
             printf("Response code 200 - sending webpage to client\n");
             fclose(fp);
-            sendFile(formattedAddress, clientSocket);
+            sendFile(formattedAddress, clientFd);
+
+            // Get the time and append it to our address string
+            time(&rawtime);
+            timeinfo = localtime(&rawtime);
+            strftime(timeText, sizeof(timeText)-1, "%Y%m%d%H%M%S", timeinfo);
+            timeText[14] = 0;
+
+            strcat(formattedAddress, " ");
+            strcat(formattedAddress, timeText);
+            strcat(formattedAddress, "\n");
 
             // Append to list.txt
-
-
-
+            listFp = fopen("list.txt", "a");
+            if (listFp == NULL)
+            {
+                perror("Error opening list.txt\n");
+            }
+            fprintf(listFp, "%s", formattedAddress);
+            fclose(listFp);
         }
         else
         {
             // Response code not 200 - send response and delete cached version
             printf("Response code not 200... response: %s\n", response);
 
-            sendMessage(response, clientSocket);
+            // Send response to client
+            sendMessage(response, clientFd);
 
             // Close file and remove cached version
             fclose(fp);
@@ -209,23 +252,28 @@ int main(int argc, char **argv)
     return 0;
 }
 
+
+// Connect to an external web server
+// This function attempts to connect to the website hostname given
+// Returns a socket point if successful, -1 otherwise
 int connectWebServer(char *website)
 {
-    int sockfd;
-    struct sockaddr_in serv_addr;             // socket structure
-    struct hostent *server;                   // socket host struct
+    int sockFd;                          // Our socket point
+    struct sockaddr_in serv_addr;        // Socket struct
+    struct hostent *server;              // Socket host struct
+
 
     printf("Connecting to %s...\n", website);
 
-    // create a socket point
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0)
+    // Create a socket point
+    sockFd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockFd < 0)
     {
         perror("ERROR opening socket");
         return -1;
     }
 
-    // assign and address our server
+    // Assign and address our server
     server = gethostbyname(website);
     if (server == NULL)
     {
@@ -233,27 +281,27 @@ int connectWebServer(char *website)
         return -1;
     }
 
-    // fill in our server address struct
+    // Fill in our server address struct
     bzero((char *) &serv_addr, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
     bcopy((char *)server->h_addr, (char *)&serv_addr.sin_addr.s_addr, server->h_length);
-    serv_addr.sin_port = htons(80);
+    serv_addr.sin_port = htons(80); // Connect on port 80
 
-    // connect to our server
-    if (connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0)
+    // Connect to our server
+    if (connect(sockFd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0)
     {
         perror("ERROR connecting");
         return -1;
     }
 
-    printf("Successfully connected to web server on port 80.\n");
-
-    return sockfd;
+    printf("Successfully connected to web server.\n");
+    return sockFd;
 }
 
 
-// Send a file to a client
+// Send a file to a client socket connection
 // This function is used to send a cached HTTP webpage to a client
+// Accepts a filename and socket point, and does not return
 void sendFile(char *filename, int clientSocket)
 {
     FILE *fp;                       // File pointer
@@ -266,6 +314,7 @@ void sendFile(char *filename, int clientSocket)
 
 
     printf("Sending file to client...\n");
+
     // Open file
     fp = fopen(filename, "r");
     if (fp == NULL)
@@ -314,10 +363,12 @@ void sendFile(char *filename, int clientSocket)
 
 // Send a message to a client socket connection
 // This function is used when seding HTTP response codes (other than 200)
+// Accepts a message pointer and a socket point, and does not return
 void sendMessage(const char* message, int clientSocket)
 {
     int n;                      // Number of bytes sent
     uint32_t convertedMsgSize;  // Size of the message we're sending
+
 
     // Send client message size
     convertedMsgSize = htonl(strlen(message));

@@ -39,7 +39,7 @@ int main (int argc, char **argv)
         portNumber = atoi(argv[1]);
     }
     */
-    portNumber = 8855;
+    portNumber = 8856;
 
     // AF_INET - IPv4 IP , Type of socket, protocol
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
