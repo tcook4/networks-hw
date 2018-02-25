@@ -127,7 +127,7 @@ int main (int argc, char **argv)
             }
         }
 
-        printf("\nData successfully recieved\n");
+        printf("\n\nData successfully recieved\n");
     }
 
     return 0;
