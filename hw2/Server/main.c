@@ -20,6 +20,8 @@ void sendFile(char* filename, int clientSocket);
 
 void sendMessage(const char *message, int clientSocket);
 
+int checkURL(char* url);
+
 
 int main(int argc, char **argv)
 {
@@ -40,12 +42,6 @@ int main(int argc, char **argv)
     time_t rawtime;                             // Time info
     struct tm *timeinfo;                        // Time struct
     char timeText[16];                          // Storage for time string
-    char *subRule, *domainRule, *topRule;       // Allowlist rule is split into three parts
-    char* checkSub, *checkDomain, *checkTop;    // User-given address split into three domain parts
-    char* tempstr;                              // Used in strtok url splitting
-    char *wildcard = "*";                       // Allowlist wildcard character
-    char *compareWild;                          // Extract single char to compare against allowlist wildcard
-    int allowed1, allowed2, allowed3;           // Checks for each part of our domain rules
     int passCheck;                              // Set if a url meets all three rule criteria
 
 
@@ -104,9 +100,6 @@ int main(int argc, char **argv)
         netDataLength = 0;
         cached = 0;
         passCheck = 0;
-        allowed1 = 0;
-        allowed2 = 0;
-        allowed3 = 0;
 
         // Get message size and convert from network order
         n = read(clientFd, (char*)&netDataLength, sizeof(netDataLength));
@@ -140,109 +133,25 @@ int main(int argc, char **argv)
         }
 
         // Check allow list to ensure we can access this website
-        bzero(address, sizeof(address));
-        fp = fopen("allowlist.txt", "r");
-        if (fp == NULL)
+        // Pass our url to check url function
+        passCheck = checkURL(fmtAddr);
+
+        // -1 return means url was malformed
+        if (passCheck == -1)
         {
-            perror("Error: can not find allowlist.txt in current directory.\n");
-            passCheck = 1; // Allow access if no allowlist.txt
+            sendMessage("Malformed URL, please try again.\n", clientFd);
+            continue;
         }
-        else
+
+        // -2 means no allowlist.txt
+        else if (passCheck == -2)
         {
-            // Copy the formatted address so we can strtok it
-            tempstr = calloc(strlen(fmtAddr)+1, sizeof(char));
-            strcpy(tempstr, fmtAddr);
-
-            // Split our url on "."
-            checkSub = strtok(tempstr, ".");
-            if (checkSub == NULL)
-            {
-                sendMessage("Malformed URL, please try again.\n", clientFd);
-                continue;
-            }
-            checkDomain = strtok(NULL, ".");
-            if (checkDomain == NULL)
-            {
-                sendMessage("Malformed URL, please try again.\n", clientFd);
-                continue;
-            }
-            checkTop = strtok(NULL, ".");
-            if (checkTop == NULL)
-            {
-                sendMessage("Malformed URL, please try again.\n", clientFd);
-                continue;
-            }
-
-            printf("Checking allowlist rules\n");
-
-
-            // Check allowlist for website we're trying to access
-            // TODO: Clean up / refactor
-            while(fgets(address, sizeof(address), fp) != NULL)
-            {
-                printf("got allow line: %s\n", address);
-                subRule = strtok(address, "."); // Set subdomain rule to first part of domain
-                if (subRule == NULL)
-                {
-                    break;
-                }
-
-                domainRule = strtok(NULL, "."); // Set domain rule to second part of domain
-                if (domainRule == NULL)
-                {
-                    break;
-                }
-
-                topRule = strtok(NULL, "."); // Set toprule to last part of domain
-                if (topRule == NULL)
-                {
-                    break;
-                }
-
-                // Check each part of our domain against the corresponding rule
-                // Also check if rule is a wildcard char '*'
-                compareWild = &subRule[7];
-                if ((strstr(subRule, checkSub)) || (strcmp(wildcard, compareWild) == 0))
-                {
-                    printf("allowed on sub rule\n");
-                    allowed1 = 1;
-                }
-
-                compareWild = &domainRule[0];
-                if ((strstr(domainRule, checkDomain)) || (strcmp(wildcard, compareWild) == 0))
-                {
-                    printf("allowed on domain rule\n");
-                    allowed2 = 1;
-                }
-
-                compareWild = &topRule[0];
-                if ((strstr(topRule, checkTop)) || (strcmp(wildcard, compareWild) == 0))
-                {
-                    printf("allowed on tld rule\n");
-                    allowed3 = 1;
-                }
-
-                // Check if the domain passed all three parts of the rule
-                if (allowed1 && allowed2 && allowed3)
-                {
-                    printf("passed all checks\n");
-                    passCheck = 1;
-                    break;
-                }
-                else // Reset our counters and try again
-                {
-                    printf("didn't pass all checks, trying again\n");
-                    allowed1 = 0;
-                    allowed2 = 0;
-                    allowed3 = 0;
-                }
-            }
-            printf("out of checking rule, passcheck is %d\n", passCheck);
-            free(tempstr);
+            sendMessage("ERROR: allowlist.txt not found on server\n", clientFd);
+            continue;
         }
 
         // If we passed the allowlist check, try and retrieve the website
-        if (passCheck)
+        if (passCheck == 1)
         {
             // Check cache for cached version
             bzero(readBuf, 512);
@@ -490,4 +399,123 @@ void sendMessage(const char* message, int clientSocket)
     {
         perror("Error sending client response\n");
     }
+}
+
+
+// Check a URL against allowlist.txt
+// This function is called after recieving a url from the client
+// Accepts a char* to a url, and returns an int indicating if the URL passes the rules
+int checkURL(char *url)
+{
+    char *subRule, *domainRule, *topRule;       // Allowlist rule is split into three parts
+    char* checkSub, *checkDomain, *checkTop;    // User-given address split into three domain parts
+    char* tempstr;                              // Used in strtok url splitting
+    char *wildcard = "*";                       // Allowlist wildcard character
+    char *compareWild;                          // Extract single char to compare against allowlist wildcard
+    int allowed1, allowed2, allowed3;           // Checks for each part of our domain rules
+    char line[1024];
+    FILE *fp;
+
+    allowed1 = 0;
+    allowed2 = 0;
+    allowed3 = 0;
+
+    bzero(line, sizeof(line));
+    fp = fopen("allowlist.txt", "r");
+    if (fp == NULL)
+    {
+        perror("Error: can not find allowlist.txt in current directory.\n");
+        return -2;
+    }
+
+
+    // Copy the formatted address so we can strtok it
+    tempstr = calloc(strlen(url)+1, sizeof(char));
+    strcpy(tempstr, url);
+
+    // Split our url on "."
+    checkSub = strtok(tempstr, ".");
+    if (checkSub == NULL)
+    {
+        free(tempstr);
+        return -1;
+    }
+    checkDomain = strtok(NULL, ".");
+    if (checkDomain == NULL)
+    {
+        free(tempstr);
+        return -1;
+    }
+    checkTop = strtok(NULL, ".");
+    if (checkTop == NULL)
+    {
+        free(tempstr);
+        return -1;
+    }
+
+    printf("Checking allowlist rules\n");
+
+
+    // Check allowlist for website we're trying to access
+    // TODO: Clean up / refactor
+    while(fgets(line, sizeof(line), fp) != NULL)
+    {
+        printf("got allow line: %s\n", line);
+        subRule = strtok(line, "."); // Set subdomain rule to first part of domain
+        if (subRule == NULL)
+        {
+            break;
+        }
+
+        domainRule = strtok(NULL, "."); // Set domain rule to second part of domain
+        if (domainRule == NULL)
+        {
+            break;
+        }
+
+        topRule = strtok(NULL, "."); // Set toprule to last part of domain
+        if (topRule == NULL)
+        {
+            break;
+        }
+
+        // Check each part of our domain against the corresponding rule
+        // Also check if rule is a wildcard char '*'
+        compareWild = &subRule[7];
+        if ((strstr(subRule, checkSub)) || (strcmp(wildcard, compareWild) == 0))
+        {
+            allowed1 = 1;
+        }
+
+        compareWild = &domainRule[0];
+        if ((strstr(domainRule, checkDomain)) || (strcmp(wildcard, compareWild) == 0))
+        {
+            allowed2 = 1;
+        }
+
+        compareWild = &topRule[0];
+        if ((strstr(topRule, checkTop)) || (strcmp(wildcard, compareWild) == 0))
+        {
+            allowed3 = 1;
+        }
+
+        // Check if the domain passed all three parts of the rule
+        if (allowed1 && allowed2 && allowed3)
+        {
+            printf("passed all checks\n");
+            free(tempstr);
+            return 1;
+        }
+        else // Reset our counters and try again
+        {
+            printf("didn't pass all checks, trying again\n");
+            allowed1 = 0;
+            allowed2 = 0;
+            allowed3 = 0;
+        }
+    }
+    free(tempstr);
+
+    // If we didn't return before now, we didn't successfully match all rules
+    return 0;
 }
