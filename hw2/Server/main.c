@@ -31,16 +31,23 @@ int main(int argc, char **argv)
     int connected, cached;              // Bools for connection and cached status
     int bytesRead;                      // Number of bytes read in a fread() operation
     char readBuf[512];                  // Read buffer for list.txt file IO
-    FILE *fp;                           // File pointer for writing web server data
-    FILE *listFp;                       // File pointer for list.txt
+    FILE *fp;                           // File pointer for web data , list.txt and allowlist.txt
     int webSockFd;                      // File descriptor for our web server
-    char response[100] = "";            // Storage for first line of http response
-    char address[1024];                 // Storage for address to search
+    char response[100];                 // Storage for first line of http response
     char fmtAddr[100];                  // Formatted domain name sotrage
+    char address[1024];                 // Storage for address to search
     char* searchPtr;                    // Search ptr for http detection
     time_t rawtime;                     // Time info
     struct tm *timeinfo;                // Time struct
     char timeText[16];                  // Storage for time string
+    char *subRule, *domainRule, *topRule;
+    char* checkSub, *checkDomain, *checkTop;
+    char* tempstr; // used in strtok url splitting
+    char *wildcard = "*"; // allowlist wildcard
+    char *compareWild; // assigned to allowlist
+    int allowed1, allowed2, allowed3;
+
+
 
     // Set our http GET message
     char* message = "GET /\r\n HTTP /1.1.";
@@ -61,7 +68,7 @@ int main(int argc, char **argv)
     }
     */
 
-    portNumber = 8856;
+    portNumber = 8857;
 
 
     // Connect to client
@@ -88,12 +95,9 @@ int main(int argc, char **argv)
     printf("Successfully connected to client!\n");
     connected = 1;
 
-
-    // TODO: Get allow list from file
-
     while (connected)
     {
-        // Initialize our buffers
+        // Initialization
         bzero(address, 1024);
         bzero(fmtAddr, 100);
         bzero(buffer, 1024);
@@ -131,12 +135,85 @@ int main(int argc, char **argv)
             strncpy(fmtAddr, address, 100);
         }
 
+        // Check allow list to ensure we can access this website
+        bzero(address, sizeof(address));
+        fp = fopen("allowlist.txt", "r");
+        if (fp == NULL)
+        {
+            perror("Error: can not find allowlist.txt in current directory\n");
+        }
+        else
+        {
+            // Copy the formatted address so we can strtok it
+            tempstr = calloc(strlen(fmtAddr)+1, sizeof(char));
+            strcpy(tempstr, fmtAddr);
+
+            // Split our url on "."
+            checkSub = strtok(tempstr, ".");
+            checkDomain = strtok(NULL, ".");
+            checkTop = strtok(NULL, ".");
+
+            // Check allowlist for website we're trying to access
+            while(fgets(address, sizeof(address), fp) != NULL)
+            {
+                subRule = strtok(address, ".");
+                if (subRule == NULL)
+                {
+                    printf("breaking on subrule null\n");
+                    break;
+                }
+                domainRule = strtok(NULL, ".");
+                if (domainRule == NULL)
+
+                {
+                    printf("breaking on domainrule null\n");
+                    break;
+                }
+                topRule = strtok(NULL, ".");
+                if (topRule == NULL)
+
+                {
+                    printf("breaking on toprule null\n");
+                    break;
+                }
+
+
+                printf("Sub, domain and top are %s %s %s\n", subRule, domainRule, topRule);
+
+                // Check if our subdomain is allowed
+                compareWild = &subRule[7];
+                printf("Wild compare is %s\n", compareWild);
+                if ((strstr(subRule, checkSub)) || ((strcmp(wildcard, compareWild)) == 0))
+                {
+                    printf("url allowed on subdomain rule\n");
+                    allowed1 = 1;
+                }
+
+                compareWild = &domainRule[0];
+                printf("Wild compare is %s\n", compareWild);
+                if ((strstr(domainRule, checkDomain)) || (strcmp(wildcard, compareWild) == 0))
+                {
+                    printf("url allowed on domain rule\n");
+                    allowed2 = 1;
+                }
+
+                compareWild = &topRule[0];
+                printf("Wild compare is %s\n", compareWild);
+                if ((strstr(topRule, checkTop)) || (strcmp(wildcard, compareWild) == 0))
+                {
+                    printf("url allowed on top rule\n");
+                    allowed3 = 1;
+                }
+            }
+            free(tempstr);
+        }
+
         // Check cache for cached version
         bzero(readBuf, 512);
-        listFp = fopen("list.txt", "r");
-        if (listFp != NULL)
+        fp = fopen("list.txt", "r");
+        if (fp != NULL)
         {
-            while (fgets(readBuf, sizeof(readBuf)-1, listFp))
+            while (fgets(readBuf, sizeof(readBuf)-1, fp))
             {
                 if(strstr(readBuf, fmtAddr))
                 {
@@ -146,7 +223,7 @@ int main(int argc, char **argv)
                     break;
                 }
             }
-            fclose(listFp);
+            fclose(fp);
         }
 
         if (!cached)
@@ -188,6 +265,7 @@ int main(int argc, char **argv)
             while (bytesRead > 0);
 
             // Rewrind to beginning of file and grab first line
+            bzero(response, 100);
             fseek(fp, 0, SEEK_SET);
             fgets(response, 100, fp);
             fclose(fp);
@@ -208,13 +286,16 @@ int main(int argc, char **argv)
                 strcat(fmtAddr, "\n");
 
                 // Append to list.txt
-                listFp = fopen("list.txt", "a");
-                if (listFp == NULL)
+                fp = fopen("list.txt", "a");
+                if (fp == NULL)
                 {
                     perror("Error opening list.txt\n");
                 }
-                fprintf(listFp, "%s", fmtAddr);
-                fclose(listFp);
+                else
+                {
+                    fprintf(fp, "%s", fmtAddr);
+                    fclose(fp);
+                }
             }
             // If response not 200, send the response and delete cached webpage
             else
@@ -301,7 +382,8 @@ void sendFile(char *filename, int clientSocket)
     fp = fopen(filename, "r");
     if (fp == NULL)
     {
-        perror("File open failed: \n");
+        perror("File open failed: ");
+        return;
     }
 
     // Seek to the end and find file length
