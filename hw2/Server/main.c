@@ -33,7 +33,7 @@ int main(int argc, char **argv)
     int connected, cached;                      // Bools for connection and cached status
     int bytesRead;                              // Number of bytes read in a fread() operation
     char readBuf[512];                          // Read buffer for list.txt file IO
-    FILE *fp;                                   // File pointer for web data , list.txt and allowlist.txt
+    FILE *fp, *fp2;                             // File pointer for web data , list.txt and allowlist.txt
     int webSockFd;                              // File descriptor for our web server
     char response[100];                         // Storage for first line of http response
     char fmtAddr[100];                          // Formatted domain name sotrage
@@ -43,7 +43,8 @@ int main(int argc, char **argv)
     struct tm *timeinfo;                        // Time struct
     char timeText[16];                          // Storage for time string
     int passCheck;                              // Set if a url meets all three rule criteria
-
+    int lineCount;                              // Used to count lines in list.txt
+    unsigned long dateAccessed, oldestDate;     // Find the oldest entry in list.txt
 
     // Set our http GET message
     char* message = "GET /\r\n HTTP /1.1.";
@@ -91,6 +92,7 @@ int main(int argc, char **argv)
     printf("Successfully connected to client!\n");
     connected = 1;
 
+    // Main body - get a url from client, parse and return
     while (connected)
     {
         // Initialization
@@ -132,17 +134,17 @@ int main(int argc, char **argv)
             strncpy(fmtAddr, address, 100);
         }
 
-        // Check our url against allowlist.txt
+        // Check our url against allowlist.txt with checkURL function
         passCheck = checkURL(fmtAddr);
 
-        // -1 return means url was malformed
+        // -1 return means the url was malformed
         if (passCheck == -1)
         {
             sendMessage("Malformed URL, please try again.\n", clientFd);
             continue;
         }
 
-        // -2 means no allowlist.txt
+        // -2 means no allowlist.txt on server
         else if (passCheck == -2)
         {
             sendMessage("ERROR: allowlist.txt not found on server.\n", clientFd);
@@ -230,25 +232,85 @@ int main(int argc, char **argv)
                     strcat(fmtAddr, timeText);
                     strcat(fmtAddr, "\n");
 
-                    // Append to list.txt
-                    fp = fopen("list.txt", "a");
+                    // Open list.txt and check if we have 5 sites stored
+                    fp = fopen("list.txt", "a+");
                     if (fp == NULL)
                     {
                         perror("Error opening list.txt\n");
                     }
                     else
                     {
-                        // Append the filename and time
-                        fprintf(fp, "%s", fmtAddr);
-
                         // Check if we have cached more than 5 websites
-                        rewind(fp);
+                        lineCount = 0;
+                        oldestDate = 30000000000000;
 
+                        bzero(buffer, sizeof(buffer));
+                        while (fgets(address, sizeof(address), fp) != NULL)
+                        {
+                            // Scan our line into our discard buffer and grab the date
+                            sscanf(address, "%s %lu\n", buffer, &dateAccessed);
+                            lineCount++;
 
+                            // If this date is younger than our oldest, update oldest and store this position
+                            // (Older dates are smaller numbers (YYYYMMDD)
+                            if (dateAccessed < oldestDate)
+                            {
+                                oldestDate = dateAccessed;
+                            }
+                        }
 
+                        // If we have less than 5 lines, append the file at the end
+                        if (lineCount < 5)
+                        {
+                            fseek(fp, 0, SEEK_END);
+                            fprintf(fp, "%s", fmtAddr);
+                            fclose(fp);
+                        }
 
-                        // Close the file
-                        fclose(fp);
+                        // Otherwise, replace the oldest value with our current
+                        else
+                        {
+                            // Seek to beginning of current file
+                            fseek(fp, 0, SEEK_SET);
+
+                            // Open temp file
+                            fp2 = fopen("temp", "w");
+                            if (fp2 == NULL)
+                            {
+                                perror("Error opening temp file\n");
+                            }
+
+                            // Re-read our values and search for our oldest term
+                            while(fgets(address, sizeof(address), fp) != NULL)
+                            {
+                                sscanf(address, "%s %lu\n", buffer, &dateAccessed);
+                                if (dateAccessed == oldestDate)
+                                {
+                                    fprintf(fp2, "%s", fmtAddr);
+
+                                }
+                                // If not oldest, write to temp file and delete cached page
+                                else
+                                {
+                                    fprintf(fp2, "%s", address);
+
+                                    if ((searchPtr = strstr(address, "http://")))
+                                    {
+                                        strncpy(readBuf, &buffer[7], 100);
+                                        printf("about to delete filename: %s\n", fmtAddr);
+
+                                        remove(fmtAddr);
+                                    }
+                                }
+                                fclose(fp2);
+                            }
+
+                            // Close the file
+                            fclose(fp);
+
+                            remove("list.txt");
+                            rename("temp", "list.txt");
+                        }
                     }
                 }
                 // If response not 200, send the response and delete cached webpage
@@ -343,7 +405,8 @@ void sendFile(char *filename, int clientSocket)
     fp = fopen(filename, "r");
     if (fp == NULL)
     {
-        perror("File open failed: ");
+        perror("Cached web page not found: ");
+        sendMessage("Error: Cached file not found on server\n", clientSocket);
         return;
     }
 
@@ -468,7 +531,6 @@ int checkURL(char *url)
     // Check allowlist for website we're trying to access
     while(fgets(line, sizeof(line), fp) != NULL)
     {
-        printf("got %s\n", line);
         subRule = strtok(line, "."); // Set subdomain rule to first part of domain
         if (subRule == NULL)
         {
@@ -519,6 +581,6 @@ int checkURL(char *url)
     }
     free(tempstr);
 
-    // If we didn't return before now, we didn't successfully match all rules
+    // If we didn't return before now, we didn't successfully match a set of three rules
     return 0;
 }
