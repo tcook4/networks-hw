@@ -278,32 +278,34 @@ int main(int argc, char **argv)
                             if (fp2 == NULL)
                             {
                                 perror("Error opening temp file\n");
+                                exit(1);
                             }
 
                             // Re-read our values and search for our oldest term
                             while(fgets(address, sizeof(address), fp) != NULL)
                             {
                                 sscanf(address, "%s %lu\n", buffer, &dateAccessed);
+                                // If we find our oldest value, write the new one instead
                                 if (dateAccessed == oldestDate)
                                 {
                                     fprintf(fp2, "%s", fmtAddr);
 
+                                    // Re-extract http and strip date to find url
+
+                                        sscanf(address, "%s %lu\n", buffer, &dateAccessed);
+                                        printf("about to remove %s\n", buffer);
+                                        remove(buffer);
+                                        printf("removed\n");
                                 }
                                 // If not oldest, write to temp file and delete cached page
                                 else
                                 {
                                     fprintf(fp2, "%s", address);
-
-                                    if ((searchPtr = strstr(address, "http://")))
-                                    {
-                                        strncpy(readBuf, &buffer[7], 100);
-                                        printf("about to delete filename: %s\n", fmtAddr);
-
-                                        remove(fmtAddr);
-                                    }
                                 }
-                                fclose(fp2);
+
                             }
+
+                            fclose(fp2);
 
                             // Close the file
                             fclose(fp);
