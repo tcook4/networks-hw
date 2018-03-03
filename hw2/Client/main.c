@@ -1,8 +1,10 @@
 /* Written by Tyler Cook
  * UNT CSCE 3530
  * Homework 2
- * February 28th, 2018
- * Description:
+ * March 2, 2018
+ * Description: This program is the client side to a proxy server. The client takes a web address from a user
+ * and passes it to the server. The server returns the web page if successful in connecting, or the HTTP response
+ * if unsuccessful. Cached pages are returned if available.
  */
 
 #include <sys/types.h>
@@ -26,7 +28,6 @@ int main (int argc, char **argv)
     int fileLength;                 // Host order file length
 
 
-    /*
     // Verify we have correct number of arguments
     if (argc != 2)
     {
@@ -37,8 +38,6 @@ int main (int argc, char **argv)
     {
         portNumber = atoi(argv[1]);
     }
-    */
-    portNumber = 8857;
 
     // AF_INET - IPv4 IP , Type of socket, protocol
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -51,12 +50,8 @@ int main (int argc, char **argv)
     servaddr.sin_family=AF_INET;
     servaddr.sin_port=htons(portNumber); // Server port number
 
-    // Convert IPv4 and IPv6 addresses from text to binary form
-
-    // inet_pton(AF_INET,"129.120.151.94",&(servaddr.sin_addr));
-    // use localhost for testing
-    inet_pton(AF_INET,"localhost",&(servaddr.sin_addr));
-
+    // Convert IPv4 address from text to binary form
+    inet_pton(AF_INET,"129.120.151.94",&(servaddr.sin_addr));
 
     // Connect to the server
     if(connect(sockfd,(struct sockaddr *)&servaddr,sizeof(servaddr)) < 0)
@@ -66,7 +61,7 @@ int main (int argc, char **argv)
     }
 
     printf("Successfully connected to server!\n");
-    printf("Please enter a string to parse, or \"quit\" to exit\n");
+    printf("Please enter a web address.\n");
 
     // Main body loop
     // Ask user for input then display server response
@@ -77,7 +72,7 @@ int main (int argc, char **argv)
         bzero(buffer, 1024);
 
         // Get input from user
-        printf("Input: ");
+        printf("Address: ");
         fgets(input, 1024, stdin);
 
         // Remove newline
@@ -114,7 +109,6 @@ int main (int argc, char **argv)
         fileLength = ntohl(networkFileLength);
 
         // Print server response
-        // TODO: check for EINTR?
         while (((n = read(sockfd, buffer, sizeof(buffer))) > 0) && (fileLength > 0))
         {
             printf("%s", buffer);

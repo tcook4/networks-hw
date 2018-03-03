@@ -1,8 +1,11 @@
 /* Written by Tyler Cook
  * UNT CSCE 3530
  * Homework 2
- * February 28th, 2018
- * Description:
+ * March 2, 2018
+ * Description: This program is the proxy server for a client. The server listens for a connection, connects, then listens for a
+ * web address. The server checks if the server passes blocklist rules, connects to the given web address (if available),
+ * and if the response code is 200, caches the web page and fowards the page to the client. Subsequent queries are answered
+ * by returning the cached page.
  */
 
 #include <sys/types.h>
@@ -12,14 +15,19 @@
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
+#include <errno.h>
+#include <limits.h>
 
-
+// Connect to a web server and return a file descriptor
 int connectWebServer(char* website);
 
+// Send a file to a client
 void sendFile(char* filename, int clientSocket);
 
+// Send a message to a client
 void sendMessage(const char *message, int clientSocket);
 
+// Check a URL against a blocklist
 int checkURL(char* url);
 
 
@@ -44,15 +52,15 @@ int main(int argc, char **argv)
     char timeText[16];                          // Storage for time string
     int passCheck;                              // Set if a url meets all three rule criteria
     int lineCount;                              // Used to count lines in list.txt
-    unsigned long dateAccessed, oldestDate;     // Find the oldest entry in list.txt
+    unsigned long long dateAccessed, oldestDate;// Find the oldest entry in list.txt
+    char filePath[PATH_MAX + 1];
 
     // Set our http GET message
-    char* message = "GET /\r\n HTTP /1.1.";
+    char* message = "GET /\r\n HTTP /1.1\r\n\r\n";
 
-    // Not connected to a client yet
+    // We aren't connected to a client yet
     connected = 0;
 
-    /*
     // Verify we have correct number of arguments
     if (argc != 2)
     {
@@ -63,12 +71,8 @@ int main(int argc, char **argv)
     {
         portNumber = atoi(argv[1]);
     }
-    */
 
-    portNumber = 8857;
-
-
-    // Connect to client
+    // Initialize our listen socket
     listenFd = socket(AF_INET, SOCK_STREAM, 0);
     bzero(&servaddr, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
@@ -103,7 +107,7 @@ int main(int argc, char **argv)
         cached = 0;
         passCheck = 0;
 
-        // Get message size and convert from network order
+        // Get message size from client and convert from network order
         n = read(clientFd, (char*)&netDataLength, sizeof(netDataLength));
         if (n < 0)
         {
@@ -111,7 +115,7 @@ int main(int argc, char **argv)
         }
         hostDataLength = ntohl(netDataLength);
 
-        // Read the website address
+        // Read the website address from the client
         bzero(buffer, 1024);
         n = read(clientFd, buffer, hostDataLength);
         if (n < 0)
@@ -120,7 +124,7 @@ int main(int argc, char **argv)
         }
         strcpy(address, buffer);
 
-        // Remove http(s) from address for gethostbyname to work
+        // Remove http(s) from address for gethostbyname
         if ((searchPtr = strstr(address, "http://")))
         {
             strncpy(fmtAddr, &address[7], 100);
@@ -134,26 +138,26 @@ int main(int argc, char **argv)
             strncpy(fmtAddr, address, 100);
         }
 
-        // Check our url against allowlist.txt with checkURL function
+        // Check our url against allowlist.txt
         passCheck = checkURL(fmtAddr);
 
-        // -1 return means the url was malformed
-        if (passCheck == -1)
+        // Switch based on results of our checkURL
+        switch (passCheck)
         {
-            sendMessage("Malformed URL, please try again.\n", clientFd);
-            continue;
-        }
+        case 0:  // We didn't pass blocklist
+            sendMessage("Website blocked based on allowlist rules.\n", clientFd);
+            break;
 
-        // -2 means no allowlist.txt on server
-        else if (passCheck == -2)
-        {
-            sendMessage("ERROR: allowlist.txt not found on server.\n", clientFd);
-            continue;
-        }
+        case -1:  // URL was malformed
+            sendMessage("Error: malformed URL, please try again.\n", clientFd);
+            break;
 
-        // If we passed the allowlist check, try and retrieve the website
-        if (passCheck == 1)
-        {
+        case -2:  // No allowlist.txt on server
+            sendMessage("Error: allowlist.txt not found on server.\n", clientFd);
+            break;
+
+        case 1: // Passed blocklist: try and retrieve the website
+
             // Check cache for cached version
             bzero(readBuf, 512);
             fp = fopen("list.txt", "r");
@@ -180,15 +184,16 @@ int main(int argc, char **argv)
                 if (webSockFd == -1)
                 {
                     printf("Connection failed: website not found\n\n");
-                    sendMessage("Website not found, please try again\n", clientFd);
+                    sendMessage("Website not found, please try again.\n", clientFd);
                     continue;
                 }
 
                 // Send GET request to web server
-                n = write(webSockFd, message, sizeof(message));
+                n = write(webSockFd, message, strlen(message));
                 if (n < 0)
                 {
-                    perror("Error writing to website...\n");
+                    perror("Error writing to website\n");
+                    sendMessage("Server error: Error writing to website.\n", clientFd);
                     continue;
                 }
 
@@ -197,11 +202,11 @@ int main(int argc, char **argv)
                 if (fp == NULL)
                 {
                     perror("Error opening file\n");
+                    sendMessage("Server error: Error opening file.\n", clientFd);
                     continue;
                 }
 
                 // Read response from web server
-                bytesRead = 0;
                 do
                 {
                     // Zero our buffer, read from the web page, and store buffer in our file
@@ -248,7 +253,7 @@ int main(int argc, char **argv)
                         while (fgets(address, sizeof(address), fp) != NULL)
                         {
                             // Scan our line into our discard buffer and grab the date
-                            sscanf(address, "%s %lu\n", buffer, &dateAccessed);
+                            sscanf(address, "%s %llu\n", buffer, &dateAccessed);
                             lineCount++;
 
                             // If this date is younger than our oldest, update oldest and store this position
@@ -284,32 +289,32 @@ int main(int argc, char **argv)
                             // Re-read our values and search for our oldest term
                             while(fgets(address, sizeof(address), fp) != NULL)
                             {
-                                sscanf(address, "%s %lu\n", buffer, &dateAccessed);
+                                sscanf(address, "%s %llu\n", buffer, &dateAccessed);
                                 // If we find our oldest value, write the new one instead
                                 if (dateAccessed == oldestDate)
                                 {
                                     fprintf(fp2, "%s", fmtAddr);
 
                                     // Re-extract http and strip date to find url
+                                    sscanf(address, "%s %llu\n", buffer, &dateAccessed);
+                                    realpath(buffer, filePath);
 
-                                        sscanf(address, "%s %lu\n", buffer, &dateAccessed);
-                                        printf("about to remove %s\n", buffer);
-                                        remove(buffer);
-                                        printf("removed\n");
+                                    // Remove old file from cache
+                                    printf("Removing file at %s.\n", filePath);
+                                    remove(filePath);
+                                    printf("Removed %s from cache.\n", buffer);
                                 }
                                 // If not oldest, write to temp file and delete cached page
                                 else
                                 {
                                     fprintf(fp2, "%s", address);
                                 }
-
                             }
-
+                            // Close our files
                             fclose(fp2);
-
-                            // Close the file
                             fclose(fp);
 
+                            // Remove our original and replace it with our temp
                             remove("list.txt");
                             rename("temp", "list.txt");
                         }
@@ -323,16 +328,10 @@ int main(int argc, char **argv)
                     // Send response to client
                     sendMessage(response, clientFd);
 
-                    // Remove cached version
+                    // Remove precached version
                     remove(fmtAddr);
                 }
             }
-        }
-
-        // If we didn't pass blocklist, notify user
-        else
-        {
-            sendMessage("Error: Website blocked based on allowlist rules.\n", clientFd);
         }
     }
 
@@ -422,6 +421,10 @@ void sendFile(char *filename, int clientSocket)
     if (sent < 0)
     {
         perror("Error sending file size: \n");
+        if (errno == EPIPE)
+        {
+            exit(1);
+        }
     }
 
     // Seek back to the beginning
@@ -445,7 +448,7 @@ void sendFile(char *filename, int clientSocket)
     }
 
     // Close our file and notify user operation is completed
-    printf("Web page successfully sent!\n\n");
+    printf("Web page successfully sent!\n");
     fclose(fp);
 }
 
@@ -465,6 +468,10 @@ void sendMessage(const char* message, int clientSocket)
     if (n < 0)
     {
         perror("Error sending client message size\n");
+        if (errno == EPIPE)
+        {
+            exit(1);
+        }
     }
 
     // Send message
@@ -472,6 +479,10 @@ void sendMessage(const char* message, int clientSocket)
     if (n < 0)
     {
         perror("Error sending client response\n");
+        if (errno == EPIPE)
+        {
+            exit(1);
+        }
     }
 }
 
@@ -528,7 +539,7 @@ int checkURL(char *url)
         return -1;
     }
 
-    printf("Checking URL against allowlist.txt\n");
+    printf("\nChecking URL against allowlist.txt\n");
 
     // Check allowlist for website we're trying to access
     while(fgets(line, sizeof(line), fp) != NULL)
