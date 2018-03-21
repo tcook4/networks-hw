@@ -3,4 +3,8 @@ CONFIG += console
 CONFIG -= app_bundle
 CONFIG -= qt
 
-SOURCES += main.c
+SOURCES += \
+    client.c
+
+DISTFILES += \
+    old
