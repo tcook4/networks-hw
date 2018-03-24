@@ -3,7 +3,7 @@
  * UNT CSCE 3530
  * Description: This is the server for a math expression parser. The server supports ten operations: addition, subtraction,
  * multiplication, division, square root, power (xy), exponential (ex), sine of a radian angle, cosine of a radian angle,
- * and log.
+ * and log. Expressions are converted to postfix and then evaluated with the shunting-yard algorithm.
 */
 
 #include <stdio.h>
@@ -54,6 +54,7 @@ int main(int argc, char **argv)
     char buf[BUFLEN];                                   // Recieve buffer
     int portNumber;                                     // Port number to listen on
 
+    // Default messages
     char *quit = "quit";
     char *errMsg = "Invalid expression";
 
@@ -101,7 +102,7 @@ int main(int argc, char **argv)
         }
 
         // Print expression as recieved
-        printf("Expression: %s\n" , buf);
+        printf("Expression recieved: %s\n" , buf);
 
         // Check for quit
         if(strstr(buf, quit) != NULL)
@@ -110,9 +111,10 @@ int main(int argc, char **argv)
             exit(0);
         }
 
-        // Convert buffer to postfix
+        // Convert our expression to postfix
         convert(buf);
 
+        // Check if the expression contained errors
         if (ERROR)
         {
             if (sendto(s, errMsg, strlen(errMsg), 0, (struct sockaddr*) &si_other, slen) == -1)
@@ -142,17 +144,17 @@ int main(int argc, char **argv)
 void convert(char *buffer)
 {
     char input;             // Evaluate expression char by char
-    char result[BUFLEN * 2];    // Result of our conversion
+    char result[BUFLEN];    // Result of our conversion
     int pos = 0;            // Keep track of our position in the result
-
-    bzero(result, BUFLEN * 2);
-
     struct Stack stack;     // Stack for conversion and initialization
+    int i, j;               // Iterator
+    int openFound = 0;      // Nested parenthesis detection
+
+    // Initialization
+    bzero(result, BUFLEN);
     stack.index = -1;
     stack.data[0] == ' ';
 
-    int i;                  // Iterator
-    int openFound = 0;      // Nested parenthesis detection
 
     // Iterate through our expression
     for(i=0; i < strlen(buffer); i++)
@@ -169,7 +171,18 @@ void convert(char *buffer)
         // Operands get appended to the result
         if (isOperand(input))
         {
-            result[pos] = input;
+            j = i;
+            while (isOperand(input))
+            {
+                result[pos] = input;
+                pos++;
+                j++;
+                input = buffer[j];
+            }
+            i = j-1;
+
+            // Tokenize postfix expression with spaces
+            result[pos] = ' ';
             pos++;
         }
 
@@ -195,11 +208,14 @@ void convert(char *buffer)
                 openFound = 0;
                 while (peek(&stack) != '(')
                 {
+                    // Append the operations delimited with spaces
                     result[pos] = pop(&stack);
+                    pos++;
+                    result[pos] = ' ';
                     pos++;
                 }
 
-                // Pop the '(' off the stack after we find it
+                // Pop the '(' off the stack after we find it and discard
                 pop(&stack);
             }
 
@@ -208,13 +224,17 @@ void convert(char *buffer)
             {
                 while (((precedence(peek(&stack))) >= (precedence(input))) && (stack.index >= 0))
                 {
+                    // Append the operations delimited with spaces
                     result[pos] = pop(&stack);
+                    pos++;
+                    result[pos] = ' ';
                     pos++;
                 }
                 push(input, &stack);
             }
 
             // Otherwise, push the operator
+            // Append high-precedence operations seperately
             else
             {
                 // Detect exponential
@@ -222,7 +242,11 @@ void convert(char *buffer)
                 {
                     result[pos] = buffer[i+2];
                     pos++;
+                    result[pos] = ' ';
+                    pos++;
                     result[pos] = 'e';
+                    pos++;
+                    result[pos] = ' ';
                     pos++;
                     i+=3;
                 }
@@ -234,7 +258,11 @@ void convert(char *buffer)
                     {
                         result[pos] = buffer[i+4];
                         pos++;
+                        result[pos] = ' ';
+                        pos++;
                         result[pos] = 'l';
+                        pos++;
+                        result[pos] = ' ';
                         pos++;
                         i+=5;
                     }
@@ -250,7 +278,11 @@ void convert(char *buffer)
                 {
                     result[pos] = buffer[i+4];
                     pos++;
+                    result[pos] = ' ';
+                    pos++;
                     result[pos] = 's';
+                    pos++;
+                    result[pos] = ' ';
                     pos++;
                     i+=5;
                 }
@@ -262,7 +294,11 @@ void convert(char *buffer)
                     {
                         result[pos] = buffer[i+4];
                         pos++;
+                        result[pos] = ' ';
+                        pos++;
                         result[pos] = 'c';
+                        pos++;
+                        result[pos] = ' ';
                         pos++;
                         i+=5;
                     }
@@ -280,7 +316,11 @@ void convert(char *buffer)
                     {
                         result[pos] = buffer[i+5];
                         pos++;
+                        result[pos] = ' ';
+                        pos++;
                         result[pos] = 'q';
+                        pos++;
+                        result[pos] = ' ';
                         pos++;
                         i+=6;
                     }
@@ -303,6 +343,8 @@ void convert(char *buffer)
     {
         result[pos] = pop(&stack);
         pos++;
+        result[pos] = ' ';
+        pos++;
     }
 
     // Now set buffer to our new postfix expression
@@ -317,6 +359,8 @@ void convert(char *buffer)
     {
         buffer[i] = '\0';
     }
+
+    printf("Postfix conversion : %s\n", buffer);
 }
 
 
@@ -325,8 +369,10 @@ void convert(char *buffer)
 void evaluate(char *buffer)
 {
     double temp1, temp2, temp3, result;     // Number Storage
-    int i;                                  // Iterator
+    int i, j;                               // Iterators
     char character;                         // Parse expression char by char
+    char digitStore[50];                    // Grab multiple-digit numbers
+    double digit;                           // Store multi-char numbers
 
     struct intStack stack;                  // Stack of numerical values
     stack.index = -1;
@@ -336,18 +382,32 @@ void evaluate(char *buffer)
     {
         character = buffer[i];
 
-        // Push operands to the stack
-        if (((character - 48) >= 0) && ((character -48) <= 9))
+        // Grab digits from our expression and store in the stack
+        if (isOperand(character))
         {
-            intPush(character-48, &stack);
+            bzero(digitStore, 50);
+            j = 0;
+
+            while (isOperand(character))
+            {
+                digitStore[j] = character;
+                j++;
+                i++;
+                character = buffer[i];
+            }
+            digit = atoi(digitStore);
+            intPush(digit, &stack);
         }
 
-        // If operator, pop operands and evaluate, and push result back on to stack
+
+        // If operator, pop operands and evaluate, and then result back on to stack
         else
         {
-            // Switch with the operational character
+            // Switch on the operational character
             switch(character)
             {
+            case ' ':
+                break;
             // Addition
             case '+':
                 temp1 = intPop(&stack);
@@ -399,7 +459,6 @@ void evaluate(char *buffer)
             case 's':
                 temp1 = intPop(&stack);
                 temp3 = sin(temp1);
-                printf("got %f for sin value\n", temp3);
                 intPush(temp3, &stack);
                 break;
 
