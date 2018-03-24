@@ -42,6 +42,8 @@ int precedence(char c);
 void intPush(double i, intStack *s);
 double intPop(intStack *s);
 void die(char *s);
+void identifyNeg(char *buffer);
+
 
 int ERROR = 0;  // Error detected in expression
 
@@ -61,9 +63,8 @@ int main(int argc, char **argv)
     // Verify we have our port number
     if (argc != 2)
     {
-        //printf("Error: Program usage: %s port_number\n", argv[0]);
-        //exit(1);
-        portNumber = 6700;
+        printf("Error: Program usage: %s port_number\n", argv[0]);
+        exit(1);
     }
     else
     {
@@ -154,6 +155,8 @@ void convert(char *buffer)
     bzero(result, BUFLEN);
     stack.index = -1;
     stack.data[0] == ' ';
+
+    identifyNeg(buffer);
 
 
     // Iterate through our expression
@@ -408,7 +411,7 @@ void evaluate(char *buffer)
             {
             case ' ':
                 break;
-            // Addition
+                // Addition
             case '+':
                 temp1 = intPop(&stack);
                 temp2 = intPop(&stack);
@@ -482,6 +485,12 @@ void evaluate(char *buffer)
                 temp3 = sqrt(temp1);
                 intPush(temp3, &stack);
                 break;
+
+                // Negative
+            case '!':
+                temp1 = intPop(&stack);
+                temp3 = temp1 * -1;
+                intPush(temp3, &stack);
             }
         }
     }
@@ -533,7 +542,7 @@ int precedence(char c)
     {
         return 2;
     }
-    if(c == 'c' || c == 's' || c == 'l' || c == 'e')
+    if(c == 'c' || c == 's' || c == 'l' || c == 'e' || c == '!')
     {
         return 3;
     }
@@ -581,3 +590,40 @@ void die(char *s)
     exit(1);
 }
 
+// Replace negaive unary minus with identifier '!'
+void identifyNeg(char *buffer)
+{
+    char input;
+    char previous = ' ';
+    int i;
+    int prevOperator = 0;
+
+    for (i = 0; i < strlen(buffer); i++)
+    {
+        input = buffer[i];
+
+        // We're looking at a minus
+        if (input == '-')
+        {
+            // If our minus sign is the first character, or it's preceede by another operator, or a parenthiesis
+            // we need to update this minus to another operator
+            if (i == 0 || prevOperator || previous == '(')
+            {
+                buffer[i] = '!';
+                continue;
+            }
+        }
+        else
+        {
+            previous = input;
+            if (previous == '+' || previous == '-' || previous == '*'|| previous == '/' || previous == '^')
+            {
+                prevOperator = 1;
+            }
+            else
+            {
+                prevOperator = 0;
+            }
+        }
+    }
+}

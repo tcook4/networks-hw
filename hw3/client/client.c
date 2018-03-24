@@ -12,8 +12,7 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 
-#define SERVER "127.0.0.1"
-//#define SERVER "129.120.151.94"
+#define SERVER "129.120.151.94"
 #define BUFLEN 512  //Max length of buffer
 
 void die(char *s)
@@ -34,9 +33,8 @@ int main(int argc, char **argv)
     // Verify we have our port number
     if (argc != 2)
     {
-        //printf("Error: Program usage: %s port_number\n", argv[0]);
-        //exit(1);
-        portNumber = 6700;
+        printf("Error: Program usage: %s port_number\n", argv[0]);
+        exit(1);
     }
     else
     {
