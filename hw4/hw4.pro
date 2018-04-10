@@ -3,4 +3,5 @@ TEMPLATE = subdirs
 SUBDIRS += \
     TCP_Server \
     checksum \
-    TCP_Client
+    TCP_Client \
+    test

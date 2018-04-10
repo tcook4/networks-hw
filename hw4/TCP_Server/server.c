@@ -10,33 +10,40 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-
+#include <time.h>
+#include <arpa/inet.h>
+#include <unistd.h>
 
 typedef struct TCP_segment
 {
     unsigned short int source;
     unsigned short int destination;
     unsigned int sequence;
-    unsigned int ack;
-    unsigned short int hdr_flags;
+    unsigned int ack;               //  11  12   13   14   15   16
+    unsigned short int hdr_flags;   // URG, ACK, PSH, RST, SYN, FIN
     unsigned short int rec_window;
     unsigned short int checksum;
     unsigned short int urgent;
     unsigned int options;
-
 }TCP_segment;
 
-
-void computeChecksum();
+unsigned int computeChecksum(TCP_segment *tcp_seg);
 
 void print_data(TCP_segment *seg);
 
 int main(int argc, char *argv[])
 {
     int listenFd, clientFd, n;                  // File descriptors and error checking
-    struct sockaddr_in servaddr;                // Server address structure
-    int portNumber;                             // Port number to use if supplied
-    TCP_segment *segBuffer;
+    struct sockaddr_in servaddr, addr;                // Server address structure
+    int portNumber,destPort, sourcePort;                     // Port numbers
+    TCP_segment *recBuff, *sendBuff;
+    char buf[INET_ADDRSTRLEN];
+    time_t t;
+    socklen_t addr_len = sizeof(addr);
+    unsigned int checksum;
+
+    // Seed random number generator
+    srand((unsigned int) time(&t));
 
     // Verify we have correct number of arguments
     if (argc != 2)
@@ -73,24 +80,76 @@ int main(int argc, char *argv[])
     printf("Successfully connected to client!\n");
 
 
+    // Allocate memory for our incoming message
+    recBuff = malloc(sizeof(TCP_segment));
+
+    // Read message
+    n = read(clientFd, recBuff, sizeof(TCP_segment));
+    if (n < 0)
+    {
+        printf("Error reading from client\n");
+    }
+
+    // Print message
+    printf("Recieved message from client:\n\n");
+    print_data(recBuff);
 
 
 
-    segBuffer = malloc(sizeof (struct TCP_segment));
+    // Get the port number we're going to use for our outgoing messages
+    n = getsockname(clientFd, (struct sockaddr *) &addr, &addr_len);
+    if (n != 0)
+    {
+        printf("Error getting socket name\n");
+    }
+    else
+    {
+        inet_ntop(AF_INET, &addr, buf, sizeof(buf));
+        printf("Get socket name returns %s:%i!\n", buf, ntohs(addr.sin_port));
+        sourcePort = ntohs(addr.sin_port);
+    }
 
-    printf("sizeof after malloc is is %d\n", sizeof(TCP_segment));
+    // Get the port number for our connected client
+    n = getpeername(clientFd,(struct sockaddr *) &addr, &addr_len);
+    if (n != 0)
+    {
+        printf("Error getting peer name\n");
+    }
+    else
+    {
+        inet_ntop(AF_INET, &addr, buf, sizeof(buf));
+        printf("Connection established successfully with %s:%i!\n", buf, ntohs(addr.sin_port));
+        destPort = ntohs(addr.sin_port);
+
+    }
 
 
-    n = read(clientFd, segBuffer, sizeof(TCP_segment));
+    // Connection granted TCP segment
+    sendBuff = malloc(sizeof (struct TCP_segment));
+    sendBuff->source = sourcePort;
+    sendBuff->destination = destPort;
+    sendBuff->sequence = rand();                      // Random initial server sequence number
+    sendBuff->ack = recBuff->sequence + 1;            // Ack initial client sequence + 1
+    sendBuff->hdr_flags = 0x0012;                     // SYN and ACK set to 1
+    sendBuff->rec_window = 0;
+    sendBuff->checksum = 0;
+    sendBuff->urgent = 0;
+    sendBuff->options = 0;
 
-    printf("read %d bytes\n", n);
+    // Compute and set the checksum for this header packet
+    checksum = computeChecksum(sendBuff);
+    sendBuff->checksum = checksum;
+
+    // Write this packet to our socket
+    printf("Sending Connection Granted TCP segment to client\n");
+    print_data(sendBuff);
+    n = write(clientFd, sendBuff, sizeof(TCP_segment));
 
 
-    print_data(segBuffer);
 
-
-
-    free(segBuffer);
+    // Free our allocated memory
+    free(recBuff);
+    free(sendBuff);
 
 
 
@@ -99,42 +158,16 @@ int main(int argc, char *argv[])
 
 
 
-void computeChecksum()
+unsigned int computeChecksum(TCP_segment *tcp_seg)
 {
-
-
-    TCP_segment tcp_seg;
     unsigned short int cksum_arr[12];
     unsigned int i,sum=0, cksum, wrap;
 
-    tcp_seg.source = 65234;
-    tcp_seg.destination = 40234;
-    tcp_seg.sequence = 1;
-    tcp_seg.ack = 2;
-    tcp_seg.hdr_flags = 0x2333;
-    tcp_seg.rec_window = 0;
-    tcp_seg.checksum = 0;  //Needs to be computed
-    tcp_seg.urgent = 0;
-    tcp_seg.options = 0;
-
     memcpy(cksum_arr, &tcp_seg, 24); //Copying 24 bytes
 
-    printf ("TCP Field Values\n");
-    printf("0x%04X\n", tcp_seg.source); // Printing all values
-    printf("0x%04X\n", tcp_seg.destination);
-    printf("0x%08X\n", tcp_seg.sequence);
-    printf("0x%08X\n", tcp_seg.ack);
-    printf("0x%04X\n", tcp_seg.hdr_flags);
-    printf("0x%04X\n", tcp_seg.rec_window);
-    printf("0x%04X\n", tcp_seg.checksum);
-    printf("0x%04X\n", tcp_seg.urgent);
-    printf("0x%08X\n", tcp_seg.options);
-
-    printf ("\n16-bit values for Checksum Calculation\n");
     for (i=0;i<12;i++)            // Compute sum
     {
-       printf("0x%04X\n", cksum_arr[i]);
-       sum = sum + cksum_arr[i];
+        sum = sum + cksum_arr[i];
     }
 
     wrap = sum >> 16;             // Wrap around once
@@ -145,23 +178,23 @@ void computeChecksum()
     sum = sum & 0x0000FFFF;
     cksum = wrap + sum;
 
-    printf("\nSum Value: 0x%04X\n", cksum);
     /* XOR the sum for checksum */
-    printf("\nChecksum Value: 0x%04X\n", (0xFFFF^cksum));
 
-
+    cksum = 0xFFFF^cksum;
+    return cksum;
 }
 
 
 void print_data(TCP_segment *seg)
 {
-    printf("Source Port Number: %u\n", seg->source);
-    printf("Destination Port Number: %u\n", seg->destination);
-    printf("Sequence Number: %u\n", seg->sequence);
-    printf("Ack Number: %u\n", seg->ack);
-    printf("Flags: %u\n", seg->hdr_flags);
-    printf("Rec Window: %u\n", seg->rec_window);
-    printf("Checksum: %u\n", seg->checksum);
-    printf("Urgent Pointer: %u\n", seg->urgent);
-    printf("Options: %u\n", seg->options);
+    printf("TCP Segment Field Values\n");
+    printf("0x%04X - Source Port Number\n", seg->source);
+    printf("0x%04X - Destination Port Number\n", seg->destination);
+    printf("0x%08X - Sequence Number\n", seg->sequence);
+    printf("0x%08X - Ack Number\n", seg->ack);
+    printf("0x%04X - Flags\n", seg->hdr_flags);
+    printf("0x%04X - Rec Window\n", seg->rec_window);
+    printf("0x%04X - Checksum\n", seg->checksum);
+    printf("0x%04X - Urgent Pointer\n", seg->urgent);
+    printf("0x%08X - Options\n", seg->options);
 }
