@@ -6,5 +6,4 @@ CONFIG -= qt
 SOURCES += \
     server.c
 
-DISTFILES += \
-    Requirements
+DISTFILES +=
