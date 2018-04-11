@@ -90,7 +90,6 @@ int main(int argc, char *argv[])
     else
     {
         inet_ntop(AF_INET, &addr, buf, sizeof(buf));
-        printf("Get socket name returns %s:%i!\n", buf, ntohs(addr.sin_port));
         sourcePort = ntohs(addr.sin_port);
     }
 
@@ -103,9 +102,7 @@ int main(int argc, char *argv[])
     else
     {
         inet_ntop(AF_INET, &addr, buf, sizeof(buf));
-        printf("Connection established successfully with %s:%i!\n", buf, ntohs(addr.sin_port));
         destPort = ntohs(addr.sin_port);
-
     }
 
 
@@ -126,7 +123,7 @@ int main(int argc, char *argv[])
     sendBuff->checksum = checksum;
 
     // Write this packet to our socket
-    printf("Sending connection request packet.\n");
+    printf("Sending connection request packet:\n");
     print_data(sendBuff);
     n = write(sockfd, sendBuff, sizeof(TCP_segment));
     if (n < 0)
@@ -145,6 +142,44 @@ int main(int argc, char *argv[])
     }
     printf("Recieved response from server:\n");
     print_data(readBuff);
+
+
+    // Create Acknowledgement TCP Segment
+    sendBuff->sequence++;
+    sendBuff->ack = readBuff->sequence+1;
+    sendBuff->hdr_flags = 0x0010;           // ACK set to 1
+    sendBuff->checksum = 0;
+
+    // Compute and set checksum
+    checksum = computeChecksum(sendBuff);
+    sendBuff->checksum = checksum;
+
+    // Print packet and send to server
+    printf("Sending acknowledgement segment.\n");
+    print_data(sendBuff);
+    n = write(sockfd, sendBuff, sizeof(TCP_segment));
+    if (n < 0)
+    {
+        printf("Error writing to server\n");
+    }
+
+
+
+    // Send close request TCP segment
+
+
+
+
+    // Read acknowledgement from server
+
+
+    // Read close acknowledgement
+
+
+
+
+    // Ack close acknowledgement
+
 
 
 
@@ -193,7 +228,7 @@ unsigned int computeChecksum(TCP_segment *tcp_seg)
 
 void print_data(TCP_segment *seg)
 {
-    printf("TCP Segment Field Values\n");
+    printf("\nTCP Segment Field Values\n");
     printf("0x%04X - Source Port Number\n", seg->source);
     printf("0x%04X - Destination Port Number\n", seg->destination);
     printf("0x%08X - Sequence Number\n", seg->sequence);
@@ -202,5 +237,5 @@ void print_data(TCP_segment *seg)
     printf("0x%04X - Rec Window\n", seg->rec_window);
     printf("0x%04X - Checksum\n", seg->checksum);
     printf("0x%04X - Urgent Pointer\n", seg->urgent);
-    printf("0x%08X - Options\n", seg->options);
+    printf("0x%08X - Options\n\n", seg->options);
 }
