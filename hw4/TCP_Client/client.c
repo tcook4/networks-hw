@@ -344,4 +344,6 @@ void write_data(TCP_segment *seg, int mode)
     fprintf(fp, "0x%04X - Checksum\n", seg->checksum);
     fprintf(fp, "0x%04X - Urgent Pointer\n", seg->urgent);
     fprintf(fp, "0x%08X - Options\n\n", seg->options);
+
+    fclose(fp);
 }
