@@ -17,19 +17,21 @@ typedef struct TCP_segment
     unsigned short int source;
     unsigned short int destination;
     unsigned int sequence;
-    unsigned int ack;               //  11  12   13   14   15   16
-    unsigned short int hdr_flags;   // URG, ACK, PSH, RST, SYN, FIN
+    unsigned int ack;
+    unsigned short int hdr_flags;
     unsigned short int rec_window;
     unsigned short int checksum;
     unsigned short int urgent;
     unsigned int options;
 }TCP_segment;
 
+
 unsigned int computeChecksum(TCP_segment *tcp_seg);
 
 void print_data(TCP_segment *seg);
 
 void write_data(TCP_segment *seg, int mode);
+
 
 int main(int argc, char *argv[])
 {
@@ -120,7 +122,7 @@ int main(int argc, char *argv[])
     }
 
     // Print message
-    printf("Recieved message from client:\n");
+    printf("Received message from client:\n");
     print_data(readBuff);
 
     // Write this packet to file
@@ -161,7 +163,7 @@ int main(int argc, char *argv[])
     {
         printf("Error reading from client\n");
     }
-    printf("Recieved acknowledgement segment from client:\n");
+    printf("Received acknowledgement segment from client:\n");
     print_data(readBuff);
 
     // Write this packet to file
@@ -187,7 +189,7 @@ int main(int argc, char *argv[])
     {
         printf("Error reading from client\n");
     }
-    printf("Recieved close request segment from client:\n");
+    printf("Received close request segment from client:\n");
     print_data(readBuff);
 
     // Write this packet to file
@@ -248,7 +250,7 @@ int main(int argc, char *argv[])
     {
         printf("Error reading from client\n");
     }
-    printf("Recieved acknowledgement segment from client:\n");
+    printf("Received acknowledgement segment from client:\n");
     print_data(readBuff);
 
     // Write this packet to file
@@ -323,9 +325,10 @@ void write_data(TCP_segment *seg, int mode)
     }
     else
     {
-        fprintf(fp, "Recieved TCP header packet:\n");
+        fprintf(fp, "Received TCP header packet:\n");
     }
 
+    // Write values to file
     fprintf(fp, "0x%04X - Source Port Number\n", seg->source);
     fprintf(fp, "0x%04X - Destination Port Number\n", seg->destination);
     fprintf(fp, "0x%08X - Sequence Number\n", seg->sequence);
@@ -336,5 +339,6 @@ void write_data(TCP_segment *seg, int mode)
     fprintf(fp, "0x%04X - Urgent Pointer\n", seg->urgent);
     fprintf(fp, "0x%08X - Options\n\n", seg->options);
 
+    // Close the file
     fclose(fp);
 }
