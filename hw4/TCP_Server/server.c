@@ -1,17 +1,20 @@
 /* Author: Tyler Cook
  * Date: 11 April, 2018
  * UNT CSCE 3530
- * Description:
+ * Description: This program is the server to a client. This program simulates a TCP three way handshake, which is initiated
+ * by the client and responded to by this server. After the handshake, the client initiates a close connection request. All
+ * output is written to both the console and a file (server.out).
 */
 
+#include <stdio.h>
 #include <sys/socket.h>
 #include <netdb.h>
-#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
 
+// TCP Header Segment structure
 typedef struct TCP_segment
 {
     unsigned short int source;
@@ -26,10 +29,13 @@ typedef struct TCP_segment
 }TCP_segment;
 
 
+// Compute the checksum for a TCP segment
 unsigned int computeChecksum(TCP_segment *tcp_seg);
 
+// Print data contained in a TCP segment
 void print_data(TCP_segment *seg);
 
+// Write data found in a TCP segment to a file
 void write_data(TCP_segment *seg, int mode);
 
 
@@ -68,198 +74,211 @@ int main(int argc, char *argv[])
     // Binds the above details to the socket
     bind(listenFd, (struct sockaddr *) &servaddr, sizeof(servaddr));
 
-    // Start listening to incoming connections
-    listen(listenFd, 10);
-    printf("Listening for connection...\n");
-
-    // Accept an incoming connection
-    clientFd = accept(listenFd, (struct sockaddr*)NULL, NULL);
-    if (clientFd < 0) // verify we accepted correctly
+    while (1)
     {
-        perror("ERROR on accept");
-        exit(1);
+
+        // Start listening to incoming connections
+        listen(listenFd, 10);
+        printf("Listening for connection...\n");
+
+        // Accept an incoming connection
+        clientFd = accept(listenFd, (struct sockaddr*)NULL, NULL);
+        if (clientFd < 0) // verify we accepted correctly
+        {
+            perror("ERROR on accept");
+            exit(1);
+        }
+        printf("Successfully connected to client!\n\n");
+
+        // Get the port number we're going to use for our outgoing messages
+        n = getsockname(clientFd, (struct sockaddr *) &addr, &addr_len);
+        if (n != 0)
+        {
+            printf("Error getting socket name\n");
+        }
+        else
+        {
+            sourcePort = ntohs(addr.sin_port);
+        }
+
+        // Get the port number for our connected client
+        n = getpeername(clientFd,(struct sockaddr *) &addr, &addr_len);
+        if (n != 0)
+        {
+            printf("Error getting peer name\n");
+        }
+        else
+        {
+            destPort = ntohs(addr.sin_port);
+        }
+
+        // Allocate memory for our incoming and outgoing messages
+        readBuff = malloc(sizeof(TCP_segment));
+        sendBuff = malloc(sizeof (struct TCP_segment));
+        if (readBuff == NULL || sendBuff == NULL)
+        {
+            printf("Malloc failure\n");
+            exit(1);
+        }
+
+
+        // Connection request procedure
+        // Read connection request message from client
+        n = read(clientFd, readBuff, sizeof(TCP_segment));
+        if (n < 0)
+        {
+            printf("Error reading from client\n");
+        }
+
+        // Print message
+        printf("Received connection request from client:\n");
+        print_data(readBuff);
+
+        // Write this packet to file
+        write_data(readBuff, 0);
+
+
+        // Create connection granted TCP segment
+        sendBuff->source = sourcePort;
+        sendBuff->destination = destPort;
+        sendBuff->sequence = rand();               // Random initial server sequence number
+        sendBuff->ack = readBuff->sequence + 1;    // Ack initial client sequence + 1
+        sendBuff->hdr_flags = 0x0012;              // SYN and ACK set to 1
+        sendBuff->rec_window = 0;
+        sendBuff->checksum = 0;
+        sendBuff->urgent = 0;
+        sendBuff->options = 0;
+
+        // Compute and set the checksum
+        checksum = computeChecksum(sendBuff);
+        sendBuff->checksum = checksum;
+
+        // Write this packet to our socket
+        printf("Sending connection granted TCP segment to client:\n");
+        print_data(sendBuff);
+        n = write(clientFd, sendBuff, sizeof(TCP_segment));
+        if (n < 0)
+        {
+            printf("Error writing to client\n");
+        }
+
+        // Write this packet to file
+        write_data(sendBuff, 1);
+
+
+        // Read ack from client
+        n = read(clientFd, readBuff, sizeof(TCP_segment));
+        if (n < 0)
+        {
+            printf("Error reading from client\n");
+        }
+        printf("Received acknowledgement segment from client:\n");
+        print_data(readBuff);
+
+        // Write this packet to file
+        write_data(readBuff, 0);
+
+        // Free allocated memory / prepare for close procedure
+        free(readBuff);
+        free(sendBuff);
+
+
+        // Reallocate memory for close procedure
+        readBuff = malloc(sizeof (struct TCP_segment));
+        sendBuff = malloc(sizeof (struct TCP_segment));
+        if (readBuff == NULL || sendBuff == NULL)
+        {
+            printf("Malloc failure\n");
+            exit(1);
+        }
+
+        // Read close connection segment from client
+        n = read(clientFd, readBuff, sizeof(TCP_segment));
+        if (n < 0)
+        {
+            printf("Error reading from client\n");
+        }
+        printf("Received close request segment from client:\n");
+        print_data(readBuff);
+
+        // Write this packet to file
+        write_data(readBuff, 0);
+
+        // Create ACK for connection close request
+        sendBuff->source = sourcePort;
+        sendBuff->destination = destPort;
+        sendBuff->sequence = 512;               // 512 per assignment instructions
+        sendBuff->ack = readBuff->sequence + 1; // ACK is client sequence + 1
+        sendBuff->hdr_flags = 0x0010;           // ACK set to 1
+        sendBuff->rec_window = 0;
+        sendBuff->checksum = 0;
+        sendBuff->urgent = 0;
+        sendBuff->options = 0;
+
+        // Compute and set the checksum
+        checksum = computeChecksum(sendBuff);
+        sendBuff->checksum = checksum;
+
+        // Send ACK for close request to client
+        printf("Sending ACK for close request to client:\n");
+        print_data(sendBuff);
+        n = write(clientFd, sendBuff, sizeof(TCP_segment));
+        if (n < 0)
+        {
+            printf("Error writing to client\n");
+        }
+
+        // Write this packet to file
+        write_data(sendBuff, 1);
+
+
+        // Create close acknowledgement segment
+        sendBuff->sequence = 512;               // 512 per assignment instructions
+        sendBuff->ack = readBuff->sequence + 1; // ACK is client sequence + 1
+        sendBuff->hdr_flags = 0x0001;           // FIN set to 1
+        sendBuff->checksum = 0;
+
+        // Compute and set the checksum
+        checksum = computeChecksum(sendBuff);
+        sendBuff->checksum = checksum;
+
+        // Send close request acknowledgement to client
+        printf("Sending close request acknowledgement to client:\n");
+        print_data(sendBuff);
+        n = write(clientFd, sendBuff, sizeof(TCP_segment));
+        if (n < 0)
+        {
+            printf("Error writing to client\n");
+        }
+
+        // Write this packet to file
+        write_data(sendBuff, 1);
+
+
+        // Read ack from client
+        n = read(clientFd, readBuff, sizeof(TCP_segment));
+        if (n < 0)
+        {
+            printf("Error reading from client\n");
+        }
+        printf("Received acknowledgement segment from client:\n");
+        print_data(readBuff);
+
+        // Write this packet to file
+        write_data(readBuff, 0);
+
+
+        // Free our allocated memory
+        free(readBuff);
+        free(sendBuff);
+
+        // Close the connection
+        close(clientFd);
+
+        printf("Connection terminated.\n");
+
     }
-    printf("Successfully connected to client!\n\n");
 
-    // Get the port number we're going to use for our outgoing messages
-    n = getsockname(clientFd, (struct sockaddr *) &addr, &addr_len);
-    if (n != 0)
-    {
-        printf("Error getting socket name\n");
-    }
-    else
-    {
-        sourcePort = ntohs(addr.sin_port);
-    }
-
-    // Get the port number for our connected client
-    n = getpeername(clientFd,(struct sockaddr *) &addr, &addr_len);
-    if (n != 0)
-    {
-        printf("Error getting peer name\n");
-    }
-    else
-    {
-        destPort = ntohs(addr.sin_port);
-    }
-
-    // Allocate memory for our incoming and outgoing messages
-    readBuff = malloc(sizeof(TCP_segment));
-    sendBuff = malloc(sizeof (struct TCP_segment));
-    if (readBuff == NULL || sendBuff == NULL)
-    {
-        printf("Malloc failure\n");
-        exit(1);
-    }
-
-
-    // Connection request procedure
-    // Read connection request message from client
-    n = read(clientFd, readBuff, sizeof(TCP_segment));
-    if (n < 0)
-    {
-        printf("Error reading from client\n");
-    }
-
-    // Print message
-    printf("Received message from client:\n");
-    print_data(readBuff);
-
-    // Write this packet to file
-    write_data(readBuff, 0);
-
-
-    // Create connection granted TCP segment
-    sendBuff->source = sourcePort;
-    sendBuff->destination = destPort;
-    sendBuff->sequence = rand();                      // Random initial server sequence number
-    sendBuff->ack = readBuff->sequence + 1;            // Ack initial client sequence + 1
-    sendBuff->hdr_flags = 0x0012;                     // SYN and ACK set to 1
-    sendBuff->rec_window = 0;
-    sendBuff->checksum = 0;
-    sendBuff->urgent = 0;
-    sendBuff->options = 0;
-
-    // Compute and set the checksum
-    checksum = computeChecksum(sendBuff);
-    sendBuff->checksum = checksum;
-
-    // Write this packet to our socket
-    printf("Sending Connection Granted TCP segment to client:\n");
-    print_data(sendBuff);
-    n = write(clientFd, sendBuff, sizeof(TCP_segment));
-    if (n < 0)
-    {
-        printf("Error writing to client\n");
-    }
-
-    // Write this packet to file
-    write_data(sendBuff, 1);
-
-
-    // Read ack from client
-    n = read(clientFd, readBuff, sizeof(TCP_segment));
-    if (n < 0)
-    {
-        printf("Error reading from client\n");
-    }
-    printf("Received acknowledgement segment from client:\n");
-    print_data(readBuff);
-
-    // Write this packet to file
-    write_data(readBuff, 0);
-
-    // Free allocated memory / prepare for close procedure
-    free(readBuff);
-    free(sendBuff);
-
-
-    // Reallocate memory for close procedure
-    readBuff = malloc(sizeof (struct TCP_segment));
-    sendBuff = malloc(sizeof (struct TCP_segment));
-    if (readBuff == NULL || sendBuff == NULL)
-    {
-        printf("Malloc failure\n");
-        exit(1);
-    }
-
-    // Read close connection segment from client
-    n = read(clientFd, readBuff, sizeof(TCP_segment));
-    if (n < 0)
-    {
-        printf("Error reading from client\n");
-    }
-    printf("Received close request segment from client:\n");
-    print_data(readBuff);
-
-    // Write this packet to file
-    write_data(readBuff, 0);
-
-    // Create ACK for connection close request
-    sendBuff->source = sourcePort;
-    sendBuff->destination = destPort;
-    sendBuff->sequence = 512;               // 512 per assignment instructions
-    sendBuff->ack = readBuff->sequence + 1; // ACK is client sequence + 1
-    sendBuff->hdr_flags = 0x0010;           // ACK set to 1
-    sendBuff->rec_window = 0;
-    sendBuff->checksum = 0;
-    sendBuff->urgent = 0;
-    sendBuff->options = 0;
-
-    // Compute and set the checksum
-    checksum = computeChecksum(sendBuff);
-    sendBuff->checksum = checksum;
-
-    // Send ACK for close request to client
-    printf("Sending ACK for close request to client:\n");
-    print_data(sendBuff);
-    n = write(clientFd, sendBuff, sizeof(TCP_segment));
-    if (n < 0)
-    {
-        printf("Error writing to client\n");
-    }
-
-    // Write this packet to file
-    write_data(sendBuff, 1);
-
-    // Create close acknowledgement segment
-    sendBuff->sequence = 512;               // 512 per assignment instructions
-    sendBuff->ack = readBuff->sequence + 1; // ACK is client sequence + 1
-    sendBuff->hdr_flags = 0x0001;           // FIN set to 1
-    sendBuff->checksum = 0;
-
-    // Compute and set the checksum
-    checksum = computeChecksum(sendBuff);
-    sendBuff->checksum = checksum;
-
-    // Send close request acknowledgement to client
-    printf("Sending close request acknowledgement to client:\n");
-    print_data(sendBuff);
-    n = write(clientFd, sendBuff, sizeof(TCP_segment));
-    if (n < 0)
-    {
-        printf("Error writing to client\n");
-    }
-
-    // Write this packet to file
-    write_data(sendBuff, 1);
-
-    // Read ack from client
-    n = read(clientFd, readBuff, sizeof(TCP_segment));
-    if (n < 0)
-    {
-        printf("Error reading from client\n");
-    }
-    printf("Received acknowledgement segment from client:\n");
-    print_data(readBuff);
-
-    // Write this packet to file
-    write_data(readBuff, 0);
-
-
-    // Free our allocated memory
-    free(readBuff);
-    free(sendBuff);
 
     // Return
     return 0;
@@ -277,7 +296,7 @@ unsigned int computeChecksum(TCP_segment *tcp_seg)
     // Compute the sum
     for (i=0;i<12;i++)
     {
-       sum = sum + cksum_arr[i];
+        sum = sum + cksum_arr[i];
     }
 
     // Wrap around once

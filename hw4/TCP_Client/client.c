@@ -1,18 +1,22 @@
 /* Author: Tyler Cook
  * Date: 11 April, 2018
  * UNT CSCE 3530
- * Description:
+ * Description: This program is the client to a server. This program simulates a TCP three way handshake, which is initiated
+ * by this client. After the handshake, the client initiates a close connection request. All output is written to both the
+ * console and a file (client.out).
 */
 
+#include <stdio.h>
 #include <sys/socket.h>
 #include <netdb.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
+#include <stdlib.h>
 #include <time.h>
-#include <arpa/inet.h>
 #include <unistd.h>
+#include <arpa/inet.h>
 
+
+// TCP Header Segment structure
 typedef struct TCP_segment
 {
     unsigned short int source;
@@ -28,10 +32,13 @@ typedef struct TCP_segment
 }TCP_segment;
 
 
+// Compute the checksum for a TCP segment
 unsigned int computeChecksum(TCP_segment *tcp_seg);
 
+// Print data contained in a TCP segment
 void print_data(TCP_segment *seg);
 
+// Write data found in a TCP segment to a file
 void write_data(TCP_segment *seg, int mode);
 
 
@@ -71,7 +78,7 @@ int main(int argc, char *argv[])
     servaddr.sin_family=AF_INET;
     servaddr.sin_port=htons(portNumber); // Server port number
 
-    // Convert IPv4 address from text to binary form
+    // Convert and fill CSCE01 IP address
     // inet_pton(AF_INET,"129.120.151.94",&(servaddr.sin_addr));
     inet_pton(AF_INET,"127.0.0.1",&(servaddr.sin_addr));
 
@@ -270,6 +277,9 @@ int main(int argc, char *argv[])
     // Free memory
     free(readBuff);
     free(sendBuff);
+
+    // Close the connection
+    close(sockfd);
 
     return 0;
 }
