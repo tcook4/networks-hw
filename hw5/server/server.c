@@ -14,6 +14,14 @@
 #define BUFLEN 512  //Max length of buffer
 #define MAXSIZE 1000 // Max size of our stack
 
+typedef struct dhcp_pkt
+{
+    unsigned int siaddr;            // Server IP address
+    unsigned int yiaddr;            // Client IP address
+    unsigned int tran_ID;           // Transaction ID
+    unsigned short int lifetime;    // Lease time
+} dhcp_pkt;
+
 // Function declarations, see below for descriptions
 
 void die(char *s);
@@ -28,6 +36,8 @@ int main(int argc, char **argv)
     int s, slen = sizeof(si_other), recv_len;           // Socket variables
     char buf[BUFLEN];                                   // Recieve buffer
     int portNumber;                                     // Port number to listen on
+    dhcp_pkt *readBuff, *sendBuff;
+    int ipTable[255];
 
     // Default messages
     char *quit = "quit";
@@ -62,6 +72,12 @@ int main(int argc, char **argv)
         die("Bind error");
     }
 
+
+    // Allocate memory for our messaages
+    readBuff = malloc(sizeof(dhcp_pkt));
+    sendBuff = malloc(sizeof(dhcp_pkt));
+
+
     // Run forever listening for data
     while(1)
     {
@@ -70,7 +86,7 @@ int main(int argc, char **argv)
         fflush(stdout);
 
         // Recieve data from client
-        if ((recv_len = recvfrom(s, buf, BUFLEN, 0, (struct sockaddr *) &si_other, &slen)) == -1)
+        if ((recv_len = recvfrom(s, readBuff, sizeof(dhcp_pkt), 0, (struct sockaddr *) &si_other, &slen)) == -1)
         {
             die("recvfrom()");
         }
@@ -91,6 +107,10 @@ int main(int argc, char **argv)
             die("sendto()");
         }
     }
+
+    // Free memory
+    free(readBuff);
+    free(sendBuff);
 
     // Close the socket
     close(s);
