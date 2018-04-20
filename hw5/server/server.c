@@ -26,6 +26,8 @@ typedef struct dhcp_pkt
 
 void die(char *s);
 
+void print_packet(struct dhcp_pkt *packet);
+
 int ERROR = 0;  // Error detected in expression
 
 
@@ -82,24 +84,65 @@ int main(int argc, char **argv)
     while(1)
     {
         bzero(buf, BUFLEN);
-        printf("Waiting for data...");
+        printf("Waiting for data...\n");
         fflush(stdout);
 
-        // Recieve data from client
-        if ((recv_len = recvfrom(s, readBuff, sizeof(dhcp_pkt), 0, (struct sockaddr *) &si_other, &slen)) == -1)
+        // Recieve discover request from client
+        if (recvfrom(s, readBuff, sizeof(dhcp_pkt), 0, (struct sockaddr *) &si_other, &slen) == -1)
         {
             die("recvfrom()");
         }
 
-        // Print expression as recieved
-        printf("Expression recieved: %s\n" , buf);
+        // Print discover packet from client
+        printf("Received DHCP Discover packet from client\n");
+        print_packet(readBuff);
 
-        // Check for quit
-        if(strstr(buf, quit) != NULL)
+        // Create our response
+        sendBuff->siaddr = readBuff->siaddr;
+        sendBuff->yiaddr = readBuff->yiaddr;    // Need to assign address here
+        sendBuff->tran_ID = readBuff->tran_ID;
+        sendBuff->lifetime = 3600;
+
+        // Print packet before send
+        printf("Sendling DHCP Offer to client\n");
+        print_packet(sendBuff);
+
+        // Send client offer
+        if (sendto(s, sendBuff, sizeof(dhcp_pkt), 0, (struct sockaddr*) &si_other, slen) == -1)
         {
-            printf("Quit message recieved, exiting...\n");
-            exit(0);
+            die("sendto()");
         }
+
+        // Flush output and listen for reques
+        fflush(stdout);
+        if (recvfrom(s, readBuff, sizeof(dhcp_pkt), 0, (struct sockaddr *) &si_other, &slen) == -1)
+        {
+            die("recvfrom()");
+        }
+
+        // Print request packet
+        printf("Received DHCP Request packet from client\n");
+        print_packet(readBuff);
+
+
+        // Create ACK response
+        sendBuff->siaddr = readBuff->siaddr;
+        sendBuff->yiaddr = readBuff->yiaddr;
+        sendBuff->tran_ID = readBuff->tran_ID;
+        sendBuff->lifetime = readBuff->lifetime;
+
+
+        // Print ACK before send
+        printf("Sendling DHCP ACK to client\n");
+        print_packet(sendBuff);
+
+        // Respond with ACK
+        if (sendto(s, sendBuff, sizeof(dhcp_pkt), 0, (struct sockaddr*) &si_other, slen) == -1)
+        {
+            die("sendto()");
+        }
+
+
 
         // Reply to the client with our result
         if (sendto(s, buf, strlen(buf), 0, (struct sockaddr*) &si_other, slen) == -1)
@@ -122,4 +165,20 @@ void die(char *s)
 {
     perror(s);
     exit(1);
+}
+
+
+// Print the contents of a packet
+void print_packet(struct dhcp_pkt *packet)
+{
+    struct in_addr ipstore;
+
+    ipstore.s_addr = packet->siaddr;
+    printf("Server IP: %s\n", inet_ntoa(ipstore));
+
+    ipstore.s_addr = packet->yiaddr;
+    printf("Client IP: %s\n", inet_ntoa(ipstore));
+
+    printf("Transaction ID: %u\n", packet->tran_ID);
+    printf("Lifetime: %u\n", packet->lifetime);
 }

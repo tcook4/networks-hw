@@ -11,8 +11,9 @@
 #include <sys/socket.h>
 #include <time.h>
 
-#define SERVER "129.120.151.94"
-#define BUFLEN 512  //Max length of buffer
+// #define SERVER "129.120.151.94"      // CSCE Server
+#define SERVER "127.0.0.1"         // Local server
+#define CLIENT "0.0.0.0"
 
 typedef struct dhcp_pkt
 {
@@ -29,10 +30,9 @@ void print_packet(struct dhcp_pkt *packet);
 int main(int argc, char **argv)
 {
     struct sockaddr_in si_other;
-    int s, i, slen=sizeof(si_other);
-    char buf[BUFLEN];
-    char message[BUFLEN];
-    char *quit = "quit";
+    struct sockaddr_in serv_ip_addr;
+    struct sockaddr_in cli_ip_addr;
+    int s, slen=sizeof(si_other);
     int portNumber;
     dhcp_pkt *readBuff, *sendBuff;
 
@@ -71,9 +71,15 @@ int main(int argc, char **argv)
     readBuff = malloc(sizeof(dhcp_pkt));
     sendBuff = malloc(sizeof(dhcp_pkt));
 
+    // Create our server and client IP Addresses
+    inet_aton(SERVER, &sendBuff->siaddr);
+    //inet_aton(CLIENT, &sendBuff->yiaddr);
+    sendBuff->yiaddr = 0;
+
+    //sendBuff->siaddr = &serv_ip_addr.sin_addr;
+    //sendBuff->yiaddr = &cli_ip_addr.sin_addr;
+
     // Create DHCP discover packet
-    sendBuff->siaddr = 12912015194;
-    sendBuff->yiaddr = 0000;
     sendBuff->tran_ID = rand();
     sendBuff->lifetime = 0;
 
@@ -84,13 +90,13 @@ int main(int argc, char **argv)
     // Send discover request to server
     if (sendto(s, sendBuff, sizeof(dhcp_pkt) , 0 , (struct sockaddr *) &si_other, slen) == -1)
     {
-        die("sendto()");
+        die("sendto() error on request");
     }
 
     // Listen for offer
     if (recvfrom(s, readBuff, sizeof(dhcp_pkt), 0, (struct sockaddr *) &si_other, &slen) == -1)
     {
-        die("recvfrom()");
+        die("recvfrom() error on offer");
     }
 
     // Print received packet
@@ -109,19 +115,18 @@ int main(int argc, char **argv)
     // Send request
     if (sendto(s, sendBuff, sizeof(dhcp_pkt) , 0 , (struct sockaddr *) &si_other, slen) == -1)
     {
-        die("sendto()");
+        die("sendto() error on request");
     }
 
     // Listen for ACK
     if (recvfrom(s, readBuff, sizeof(dhcp_pkt), 0, (struct sockaddr *) &si_other, &slen) == -1)
     {
-        die("recvfrom()");
+        die("recvfrom() error on ACK");
     }
 
     // Print received packet
     printf("Received DHCP ACK packet from server\n");
     print_packet(readBuff);
-
 
     // Free memory
     free(readBuff);
@@ -142,9 +147,14 @@ void die(char *s)
 // Print the contents of a packet
 void print_packet(struct dhcp_pkt *packet)
 {
-    printf("%u : Server IP\n", packet->siaddr);
-    printf("%u : Client IP\n", packet->yiaddr);
-    printf("%u : Transaction ID\n", packet->tran_ID);
-    printf("%u : Lifetime\n", packet->lifetime);
-}
+    struct in_addr ipstore;
 
+    ipstore.s_addr = packet->siaddr;
+    printf("Server IP: %s\n", inet_ntoa(ipstore));
+
+    ipstore.s_addr = packet->yiaddr;
+    printf("Client IP: %s\n", inet_ntoa(ipstore));
+
+    printf("Transaction ID: %u\n", packet->tran_ID);
+    printf("Lifetime: %u\n", packet->lifetime);
+}
