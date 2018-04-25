@@ -30,20 +30,37 @@ void print_packet(struct dhcp_pkt *packet);
 
 int ERROR = 0;  // Error detected in expression
 
-
 // Main method
 int main(int argc, char **argv)
 {
-    struct sockaddr_in si_me, si_other;                 // Socket structure
-    int s, slen = sizeof(si_other), recv_len;           // Socket variables
+    struct sockaddr_in si_me, si_other, si_gate, si_sub;       // Socket structure
+    int s, slen, i;                     // Socket variables
     char buf[BUFLEN];                                   // Recieve buffer
     int portNumber;                                     // Port number to listen on
     dhcp_pkt *readBuff, *sendBuff;
-    int ipTable[255];
+    int validGate, validSub, validInput;       // Gateway and Subnet Validation
+    char gatewayIn[INET_ADDRSTRLEN];
+    char subnetIn[INET_ADDRSTRLEN];
+    unsigned int gateway, subnet;
+    unsigned long timestamp;
+    unsigned long *addresses;
 
-    // Default messages
-    char *quit = "quit";
-    char *errMsg = "Invalid expression";
+
+    unsigned int available, range;
+    struct sockaddr_in socktest;
+    char ip4[INET_ADDRSTRLEN];
+
+
+    // Initialization
+    validGate = 0;
+    validSub = 0;
+    validInput = 0;
+    memset(gatewayIn, 0, INET_ADDRSTRLEN);
+    memset(subnetIn, 0, INET_ADDRSTRLEN);
+    gateway = 0;
+    subnet = 0;
+    slen = sizeof(si_other);
+
 
     // Verify we have our port number
     if (argc != 2)
@@ -55,6 +72,74 @@ int main(int argc, char **argv)
     {
         portNumber = atoi(argv[1]);
     }
+
+    int debug = 1;
+
+    if (debug)
+    {
+        strncpy(gatewayIn, "192.168.1.1", 13);
+        strncpy(subnetIn, "255.255.255.0", 13);
+        inet_pton(AF_INET, gatewayIn, &(si_gate.sin_addr));
+        inet_pton(AF_INET, subnetIn, &(si_sub.sin_addr));
+
+        printf("Gate and sub are %s and %s\n", gatewayIn, subnetIn);
+    }
+    else
+    {
+        while (!validInput)
+        {
+            // Get gateway from user and verify
+            if (!validGate)
+            {
+                printf("Please enter gateway in dot format. Example: 192.168.0.1\n");
+                scanf("%s", gatewayIn);
+                if((inet_pton(AF_INET, gatewayIn, &(si_gate.sin_addr))) != 1)
+                {
+                    printf("Error: Gateway not valid\n");
+                    continue;
+                }
+                validGate = 1;
+            }
+
+            // Get subnet from user and verify
+            if (!validSub)
+            {
+                printf("Please enter subnet in dot format. Example: 255.255.255.0\n");
+                scanf("%s", subnetIn);
+                if((inet_pton(AF_INET, subnetIn, &(si_sub.sin_addr))) != 1)
+                {
+                    printf("Error: Subnet not valid\n");
+                    continue;
+                }
+                validSub = 1;
+            }
+            break;
+        }
+    }
+
+    // Assign gateway and subnet
+    gateway = ntohl(si_gate.sin_addr.s_addr);
+    subnet = ntohl(si_sub.sin_addr.s_addr);
+
+    available = subnet && gateway;
+    range = ~subnet;
+
+
+    socktest.sin_addr.s_addr = htonl(available);
+    inet_ntop(AF_INET, &(socktest.sin_addr), ip4, INET_ADDRSTRLEN);
+
+    printf("The IPv4 address is: %s\n", ip4);
+    printf("The range of addresses is %u\n", range);
+
+    addresses = malloc(sizeof(unsigned long) * range);
+    memset(addresses, 0, sizeof(unsigned long) * range);
+
+
+    // Start address byte
+
+    // End address byte
+
+
 
     //create a UDP socket
     if ((s=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
@@ -74,37 +159,37 @@ int main(int argc, char **argv)
         die("Bind error");
     }
 
-
     // Allocate memory for our messaages
     readBuff = malloc(sizeof(dhcp_pkt));
     sendBuff = malloc(sizeof(dhcp_pkt));
-
 
     // Run forever listening for data
     while(1)
     {
         bzero(buf, BUFLEN);
-        printf("Waiting for data...\n");
+        printf("Waiting for data...\n\n");
         fflush(stdout);
 
         // Recieve discover request from client
+
         if (recvfrom(s, readBuff, sizeof(dhcp_pkt), 0, (struct sockaddr *) &si_other, &slen) == -1)
         {
             die("recvfrom()");
         }
 
         // Print discover packet from client
-        printf("Received DHCP Discover packet from client\n");
+        printf("Received DHCP Discover packet from client...\n\n");
         print_packet(readBuff);
 
-        // Create our response
+        // Create IP for new host
+        gateway++;
+
+        // Create our response and print
         sendBuff->siaddr = readBuff->siaddr;
-        sendBuff->yiaddr = readBuff->yiaddr;    // Need to assign address here
+        sendBuff->yiaddr = htonl(gateway);    // Need to assign address here
         sendBuff->tran_ID = readBuff->tran_ID;
         sendBuff->lifetime = 3600;
-
-        // Print packet before send
-        printf("Sendling DHCP Offer to client\n");
+        printf("Sendling DHCP Offer to client...\n\n");
         print_packet(sendBuff);
 
         // Send client offer
@@ -120,20 +205,17 @@ int main(int argc, char **argv)
             die("recvfrom()");
         }
 
-        // Print request packet
-        printf("Received DHCP Request packet from client\n");
+        // Print received request packet
+        printf("Received DHCP Request packet from client...\n\n");
         print_packet(readBuff);
 
 
-        // Create ACK response
+        // Create ACK response and print
         sendBuff->siaddr = readBuff->siaddr;
         sendBuff->yiaddr = readBuff->yiaddr;
         sendBuff->tran_ID = readBuff->tran_ID;
         sendBuff->lifetime = readBuff->lifetime;
-
-
-        // Print ACK before send
-        printf("Sendling DHCP ACK to client\n");
+        printf("Sendling DHCP ACK to client...\n\n");
         print_packet(sendBuff);
 
         // Respond with ACK
@@ -142,13 +224,7 @@ int main(int argc, char **argv)
             die("sendto()");
         }
 
-
-
-        // Reply to the client with our result
-        if (sendto(s, buf, strlen(buf), 0, (struct sockaddr*) &si_other, slen) == -1)
-        {
-            die("sendto()");
-        }
+        // Update our address structure
     }
 
     // Free memory
@@ -180,5 +256,5 @@ void print_packet(struct dhcp_pkt *packet)
     printf("Client IP: %s\n", inet_ntoa(ipstore));
 
     printf("Transaction ID: %u\n", packet->tran_ID);
-    printf("Lifetime: %u\n", packet->lifetime);
+    printf("Lifetime: %u\n\n", packet->lifetime);
 }
