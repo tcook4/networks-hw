@@ -12,8 +12,8 @@
 #include <sys/socket.h>
 #include <time.h>
 
-//#define SERVER "129.120.151.94"      // CSCE Server
-#define SERVER "127.0.0.1"         // Local server
+#define SERVER "129.120.151.94"      // CSCE Server
+// #define SERVER "127.0.0.1"        // Local server
 
 // DHCP packet structure
 typedef struct dhcp_pkt
@@ -35,7 +35,7 @@ void print_packet(struct dhcp_pkt *packet);
 // Main method
 int main(int argc, char **argv)
 {
-    struct sockaddr_in si_other;        // Socket address structure
+    struct sockaddr_in si_other, sock;  // Socket address structure
     int s, slen=sizeof(si_other);       // Sendto and recvfrom usage
     int portNumber, choice;             // Port number and user choice
     dhcp_pkt *readBuff, *sendBuff;      // Packet storage
@@ -80,7 +80,8 @@ int main(int argc, char **argv)
         sendBuff = malloc(sizeof(dhcp_pkt));
 
         // Create DHCP discover packet
-        inet_aton(SERVER, &sendBuff->siaddr);
+        inet_aton(SERVER, &sock.sin_addr);
+        sendBuff->siaddr = sock.sin_addr.s_addr;
         sendBuff->yiaddr = 0;
         sendBuff->tran_ID = rand();
         sendBuff->lifetime = 0;
