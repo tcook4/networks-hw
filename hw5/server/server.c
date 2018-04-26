@@ -1,7 +1,8 @@
 /* Author: Tyler Cook
  * Date: 25 April, 2018
  * UNT CSCE 3530
- * Description:
+ * Description: This is the server for a client-server DHCP implementation. The server requests a gateway and subnet from the user
+ * and then listens for requests. The server will receive a discover request, reply with an offer, and record the IP as allocated.
 */
 
 #include <stdio.h>
@@ -11,9 +12,9 @@
 #include <sys/socket.h>
 #include <math.h>
 
-#define BUFLEN 512  //Max length of buffer
 #define MAXSIZE 1000 // Max size of our stack
 
+// DHCP packet structure
 typedef struct dhcp_pkt
 {
     unsigned int siaddr;            // Server IP address
@@ -22,33 +23,26 @@ typedef struct dhcp_pkt
     unsigned short int lifetime;    // Lease time
 } dhcp_pkt;
 
-// Function declarations, see below for descriptions
 
+// Print error and exit
 void die(char *s);
 
+// Print the contents of a DHCP packet
 void print_packet(struct dhcp_pkt *packet);
 
-int ERROR = 0;  // Error detected in expression
 
 // Main method
 int main(int argc, char **argv)
 {
-    struct sockaddr_in si_me, si_other, si_gate, si_sub;       // Socket structure
-    int s, slen, i;                     // Socket variables
-    char buf[BUFLEN];                                   // Recieve buffer
-    int portNumber;                                     // Port number to listen on
-    dhcp_pkt *readBuff, *sendBuff;
-    int validGate, validSub, validInput;       // Gateway and Subnet Validation
-    char gatewayIn[INET_ADDRSTRLEN];
-    char subnetIn[INET_ADDRSTRLEN];
-    unsigned int gateway, subnet;
-    unsigned long timestamp;
-    unsigned long *addresses;
-
-
-    unsigned int available, range;
-    struct sockaddr_in socktest;
-    char ip4[INET_ADDRSTRLEN];
+    struct sockaddr_in si_me, si_other, si_gate, si_sub;     // Socket structure
+    int s, slen;                                             // Socket variables
+    int portNumber;                                          // Port number to listen on
+    dhcp_pkt *readBuff, *sendBuff;                           // DHCP Packet storage
+    int validGate, validSub, validInput;                     // Gateway and Subnet Validation
+    char gatewayIn[INET_ADDRSTRLEN];                         // Gateway input
+    char subnetIn[INET_ADDRSTRLEN];                          // Subnet input
+    unsigned int gateway, subnet;                            // Integer representation of IPs
+    unsigned int range;                                      // Range of available IPs
 
 
     // Initialization
@@ -73,73 +67,43 @@ int main(int argc, char **argv)
         portNumber = atoi(argv[1]);
     }
 
-    int debug = 1;
-
-    if (debug)
+    while (!validInput)
     {
-        strncpy(gatewayIn, "192.168.1.1", 13);
-        strncpy(subnetIn, "255.255.255.0", 13);
-        inet_pton(AF_INET, gatewayIn, &(si_gate.sin_addr));
-        inet_pton(AF_INET, subnetIn, &(si_sub.sin_addr));
-
-        printf("Gate and sub are %s and %s\n", gatewayIn, subnetIn);
-    }
-    else
-    {
-        while (!validInput)
+        // Get gateway from user and verify
+        if (!validGate)
         {
-            // Get gateway from user and verify
-            if (!validGate)
+            printf("Please enter gateway in dot format. Example: 192.168.0.1\n");
+            scanf("%s", gatewayIn);
+            if((inet_pton(AF_INET, gatewayIn, &(si_gate.sin_addr))) != 1)
             {
-                printf("Please enter gateway in dot format. Example: 192.168.0.1\n");
-                scanf("%s", gatewayIn);
-                if((inet_pton(AF_INET, gatewayIn, &(si_gate.sin_addr))) != 1)
-                {
-                    printf("Error: Gateway not valid\n");
-                    continue;
-                }
-                validGate = 1;
+                printf("Error: Gateway not valid\n");
+                continue;
             }
-
-            // Get subnet from user and verify
-            if (!validSub)
-            {
-                printf("Please enter subnet in dot format. Example: 255.255.255.0\n");
-                scanf("%s", subnetIn);
-                if((inet_pton(AF_INET, subnetIn, &(si_sub.sin_addr))) != 1)
-                {
-                    printf("Error: Subnet not valid\n");
-                    continue;
-                }
-                validSub = 1;
-            }
-            break;
+            validGate = 1;
         }
+
+        // Get subnet from user and verify
+        if (!validSub)
+        {
+            printf("Please enter subnet in dot format. Example: 255.255.255.0\n");
+            scanf("%s", subnetIn);
+            if((inet_pton(AF_INET, subnetIn, &(si_sub.sin_addr))) != 1)
+            {
+                printf("Error: Subnet not valid\n");
+                continue;
+            }
+            validSub = 1;
+        }
+        break;
     }
+
 
     // Assign gateway and subnet
     gateway = ntohl(si_gate.sin_addr.s_addr);
     subnet = ntohl(si_sub.sin_addr.s_addr);
 
-    available = subnet && gateway;
+    // Total number of available IPs is inverse of subnet
     range = ~subnet;
-
-
-    socktest.sin_addr.s_addr = htonl(available);
-    inet_ntop(AF_INET, &(socktest.sin_addr), ip4, INET_ADDRSTRLEN);
-
-    printf("The IPv4 address is: %s\n", ip4);
-    printf("The range of addresses is %u\n", range);
-
-    addresses = malloc(sizeof(unsigned long) * range);
-    memset(addresses, 0, sizeof(unsigned long) * range);
-
-
-    // Start address byte
-
-    // End address byte
-
-
 
     //create a UDP socket
     if ((s=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
@@ -166,12 +130,11 @@ int main(int argc, char **argv)
     // Run forever listening for data
     while(1)
     {
-        bzero(buf, BUFLEN);
+        memset(readBuff, 0, sizeof(dhcp_pkt));
         printf("Waiting for data...\n\n");
         fflush(stdout);
 
         // Recieve discover request from client
-
         if (recvfrom(s, readBuff, sizeof(dhcp_pkt), 0, (struct sockaddr *) &si_other, &slen) == -1)
         {
             die("recvfrom()");
@@ -181,8 +144,15 @@ int main(int argc, char **argv)
         printf("Received DHCP Discover packet from client...\n\n");
         print_packet(readBuff);
 
+        if (range == 0)
+        {
+            printf("ERROR: All available IPs are in use\n");
+            continue;
+        }
+
         // Create IP for new host
         gateway++;
+        range--;
 
         // Create our response and print
         sendBuff->siaddr = readBuff->siaddr;
@@ -208,7 +178,6 @@ int main(int argc, char **argv)
         // Print received request packet
         printf("Received DHCP Request packet from client...\n\n");
         print_packet(readBuff);
-
 
         // Create ACK response and print
         sendBuff->siaddr = readBuff->siaddr;

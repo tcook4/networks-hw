@@ -12,7 +12,7 @@
 #include <sys/socket.h>
 #include <time.h>
 
-// #define SERVER "129.120.151.94"      // CSCE Server
+//#define SERVER "129.120.151.94"      // CSCE Server
 #define SERVER "127.0.0.1"         // Local server
 
 // DHCP packet structure
@@ -24,6 +24,7 @@ typedef struct dhcp_pkt
     unsigned short int lifetime;    // Lease time
 } dhcp_pkt;
 
+
 // Print error and exit
 void die(char *s);
 
@@ -31,6 +32,7 @@ void die(char *s);
 void print_packet(struct dhcp_pkt *packet);
 
 
+// Main method
 int main(int argc, char **argv)
 {
     struct sockaddr_in si_other;        // Socket address structure
@@ -84,7 +86,7 @@ int main(int argc, char **argv)
         sendBuff->lifetime = 0;
 
         // Print this packet before send
-        printf("Sending DHCP Discover packet to server\n");
+        printf("Sending DHCP Discover packet to server...\n\n");
         print_packet(sendBuff);
 
         // Send discover request to server
@@ -100,7 +102,7 @@ int main(int argc, char **argv)
         }
 
         // Print received packet
-        printf("Received DHCP Offer packet from server\n");
+        printf("Received DHCP Offer packet from server...\n\n");
         print_packet(readBuff);
 
         // Create DHCP request packet
@@ -109,7 +111,7 @@ int main(int argc, char **argv)
         sendBuff->lifetime = readBuff->lifetime;
 
         // Print this packet before send
-        printf("Sending DHCP Request packet to server\n");
+        printf("Sending DHCP Request packet to server...\n\n");
         print_packet(sendBuff);
 
         // Send request
@@ -125,7 +127,7 @@ int main(int argc, char **argv)
         }
 
         // Print received packet
-        printf("Received DHCP ACK packet from server\n");
+        printf("Received DHCP ACK packet from server...\n\n");
         print_packet(readBuff);
 
         // Free memory
@@ -177,5 +179,5 @@ void print_packet(struct dhcp_pkt *packet)
     printf("Client IP: %s\n", inet_ntoa(ipstore));
 
     printf("Transaction ID: %u\n", packet->tran_ID);
-    printf("Lifetime: %u\n", packet->lifetime);
+    printf("Lifetime: %u\n\n", packet->lifetime);
 }
